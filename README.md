@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/rldiao-mealie-mcp-server-badge.png)](https://mseep.ai/app/rldiao-mealie-mcp-server)
+
 # Mealie MCP Server
 
 This project enables AI assistants to interact with your [Mealie](https://github.com/mealie-recipes/mealie) recipe database through MCP client such as Claude Desktop.
