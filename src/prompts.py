@@ -1,5 +1,5 @@
-from fastmcp import FastMCP
-from fastmcp.prompts import AssistantMessage, Message, UserMessage
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.prompts.base import AssistantMessage, Message, UserMessage
 
 
 def register_prompts(mcp: FastMCP) -> None:

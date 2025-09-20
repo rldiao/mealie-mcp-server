@@ -3,7 +3,7 @@ import os
 import traceback
 
 from dotenv import load_dotenv
-from fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP
 
 from mealie import MealieFetcher
 from prompts import register_prompts

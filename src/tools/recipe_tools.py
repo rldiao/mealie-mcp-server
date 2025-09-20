@@ -2,7 +2,7 @@ import logging
 import traceback
 from typing import List, Optional
 
-from fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP
 
 from mealie import MealieFetcher
 from models.recipe import Recipe, RecipeIngredient, RecipeInstruction
