@@ -3,10 +3,10 @@ import traceback
 from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
 
 from mealie import MealieFetcher
 from models.mealplan import MealPlanEntry
-from utils import format_error_response
 
 logger = logging.getLogger("mealie-mcp")
 
@@ -54,7 +54,7 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             logger.debug(
                 {"message": "Error traceback", "traceback": traceback.format_exc()}
             )
-            return format_error_response(error_msg)
+            raise ToolError(error_msg)
 
     @mcp.tool()
     def create_mealplan(
@@ -82,7 +82,7 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             logger.debug(
                 {"message": "Error traceback", "traceback": traceback.format_exc()}
             )
-            return format_error_response(error_msg)
+            raise ToolError(error_msg)
 
     @mcp.tool()
     def create_mealplan_bulk(
@@ -112,7 +112,7 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             logger.debug(
                 {"message": "Error traceback", "traceback": traceback.format_exc()}
             )
-            return format_error_response(error_msg)
+            raise ToolError(error_msg)
 
     @mcp.tool()
     def get_todays_mealplan() -> List[Dict[str, Any]]:
@@ -130,4 +130,4 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             logger.debug(
                 {"message": "Error traceback", "traceback": traceback.format_exc()}
             )
-            return format_error_response(error_msg)
+            raise ToolError(error_msg)

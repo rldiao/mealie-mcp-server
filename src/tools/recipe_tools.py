@@ -3,10 +3,10 @@ import traceback
 from typing import List, Optional
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
 
 from mealie import MealieFetcher
 from models.recipe import Recipe, RecipeIngredient, RecipeInstruction
-from utils import format_error_response
 
 logger = logging.getLogger("mealie-mcp")
 
@@ -58,7 +58,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             logger.debug(
                 {"message": "Error traceback", "traceback": traceback.format_exc()}
             )
-            return format_error_response(error_msg)
+            raise ToolError(error_msg)
 
     @mcp.tool()
     def get_recipe_detailed(slug: str) -> str:
@@ -82,7 +82,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             logger.debug(
                 {"message": "Error traceback", "traceback": traceback.format_exc()}
             )
-            return format_error_response(error_msg)
+            raise ToolError(error_msg)
 
     @mcp.tool()
     def get_recipe_concise(slug: str) -> str:
@@ -108,7 +108,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                     "recipeYield",
                     "totalTime",
                     "rating",
-                      "recipeIngredient",
+                    "recipeIngredient",
                     "lastMade",
                 },
                 exclude_none=True,
@@ -119,7 +119,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             logger.debug(
                 {"message": "Error traceback", "traceback": traceback.format_exc()}
             )
-            return format_error_response(error_msg)
+            raise ToolError(error_msg)
 
     @mcp.tool()
     def create_recipe(
@@ -151,7 +151,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             logger.debug(
                 {"message": "Error traceback", "traceback": traceback.format_exc()}
             )
-            return format_error_response(error_msg)
+            raise ToolError(error_msg)
 
     @mcp.tool()
     def update_recipe(
@@ -184,4 +184,4 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             logger.debug(
                 {"message": "Error traceback", "traceback": traceback.format_exc()}
             )
-            return format_error_response(error_msg)
+            raise ToolError(error_msg)
