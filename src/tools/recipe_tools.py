@@ -1,6 +1,6 @@
 import logging
 import traceback
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
@@ -21,7 +21,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         per_page: Optional[int] = None,
         categories: Optional[List[str]] = None,
         tags: Optional[List[str]] = None,
-    ) -> str:
+    ) -> Dict[str, Any]:
         """Provides a paginated list of recipes with optional filtering.
 
         Args:
@@ -32,7 +32,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             tags: Filter by specific recipe tags.
 
         Returns:
-            str: Recipe summaries with details like ID, name, description, and image information.
+            Dict[str, Any]: Recipe summaries with details like ID, name, description, and image information.
         """
         try:
             logger.info(
@@ -61,7 +61,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             raise ToolError(error_msg)
 
     @mcp.tool()
-    def get_recipe_detailed(slug: str) -> str:
+    def get_recipe_detailed(slug: str) -> Dict[str, Any]:
         """Retrieve a specific recipe by its slug identifier. Use this when to get full recipe
         details for tasks like updating or displaying the recipe.
 
@@ -70,7 +70,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 or from get_recipes results.
 
         Returns:
-            str: Comprehensive recipe details including ingredients, instructions,
+            Dict[str, Any]: Comprehensive recipe details including ingredients, instructions,
                 nutrition information, notes, and associated metadata.
         """
         try:
@@ -85,7 +85,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             raise ToolError(error_msg)
 
     @mcp.tool()
-    def get_recipe_concise(slug: str) -> str:
+    def get_recipe_concise(slug: str) -> Dict[str, Any]:
         """Retrieve a concise version of a specific recipe by its slug identifier. Use this when you only
         need a summary of the recipe, such as for when mealplaning.
 
@@ -93,7 +93,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             slug: The unique text identifier for the recipe, typically found in recipe URLs
                 or from get_recipes results.
 
-
+        Returns:
+            Dict[str, Any]: Concise recipe summary with essential fields.
         """
         try:
             logger.info({"message": "Fetching recipe", "slug": slug})
@@ -123,8 +124,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
     @mcp.tool()
     def create_recipe(
-        name: str, ingredients: list[str], instructions: list[str]
-    ) -> str:
+        name: str, ingredients: List[str], instructions: List[str]
+    ) -> Dict[str, Any]:
         """Create a new recipe
 
         Args:
@@ -133,7 +134,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             instructions: A list of instructions for preparing the recipe.
 
         Returns:
-            str: Confirmation message or details about the created recipe.
+            Dict[str, Any]: The created recipe details.
         """
         try:
             logger.info({"message": "Creating recipe", "name": name})
@@ -156,9 +157,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     @mcp.tool()
     def update_recipe(
         slug: str,
-        ingredients: list[str],
-        instructions: list[str],
-    ) -> str:
+        ingredients: List[str],
+        instructions: List[str],
+    ) -> Dict[str, Any]:
         """Replaces the ingredients and instructions of an existing recipe.
 
         Args:
@@ -167,7 +168,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             instructions: A list of instructions for preparing the recipe.
 
         Returns:
-            str: Confirmation message or details about the updated recipe.
+            Dict[str, Any]: The updated recipe details.
         """
         try:
             logger.info({"message": "Updating recipe", "slug": slug})
