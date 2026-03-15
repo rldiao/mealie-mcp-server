@@ -1,4 +1,7 @@
 import logging
+import re
+import subprocess
+import json
 import traceback
 from typing import Any, Dict, List, Optional
 
@@ -6,9 +9,178 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
 from mealie import MealieFetcher
-from models.recipe import Recipe, RecipeIngredient, RecipeInstruction
+from models.recipe import (
+    Recipe,
+    RecipeIngredient,
+    RecipeInstruction,
+    IngredientUnit,
+    IngredientFood,
+)
 
 logger = logging.getLogger("mealie-mcp")
+
+KNOWN_UNITS = {
+    # Metric weight
+    'kg', 'g', 'gram', 'grams', 'mg', 'oz', 'ounce', 'ounces', 'lb', 'lbs', 'pound', 'pounds',
+    # Metric volume
+    'l', 'liter', 'liters', 'litre', 'litres', 'dl', 'cl', 'ml',
+    'cup', 'cups', 'fl', 'gallon', 'gallons', 'gal', 'quart', 'quarts', 'qt', 'pint', 'pints', 'pt',
+    # Spoon measures (Dutch)
+    'el', 'eetlepel', 'eetlepels',
+    'tl', 'theelepel', 'theelepels',
+    # Spoon measures (English)
+    'tbsp', 'tablespoon', 'tablespoons',
+    'tsp', 'teaspoon', 'teaspoons',
+    # Pinch / dash
+    'snuf', 'snufje', 'snufjes',
+    'pinch', 'pinches', 'dash', 'dashes',
+    # Piece / unit
+    'stuk', 'stuks',
+    'piece', 'pieces', 'whole',
+    # Slice
+    'plak', 'plakje', 'plakjes', 'plakken',
+    'slice', 'slices',
+    # Disc / round
+    'schijf', 'schijfje', 'schijfjes', 'schijven',
+    # Sprig / branch
+    'tak', 'takje', 'takjes', 'takken',
+    'sprig', 'sprigs', 'branch', 'branches',
+    # Clove
+    'teen', 'tenen', 'teentje', 'teentjes',
+    'clove', 'cloves',
+    # Can / tin
+    'blik', 'blikje', 'blikjes', 'blikken',
+    'can', 'cans', 'tin', 'tins',
+    # Jar / pot
+    'pot', 'potje', 'potjes', 'potten',
+    'jar', 'jars',
+    # Bag
+    'zak', 'zakje', 'zakjes', 'zakken',
+    'bag', 'bags',
+    # Pack / package
+    'pak', 'pakje', 'pakjes', 'pakken',
+    'pack', 'packs', 'package', 'packages',
+    # Bunch
+    'bos', 'bosje', 'bosjes', 'bossen',
+    'bus', 'busje', 'busjes', 'bussen',
+    'bunch', 'bunches',
+    # Leaf
+    'blad', 'blaadje', 'blaadjes', 'bladeren',
+    'leaf', 'leaves',
+    # Drop
+    'druppel', 'druppels',
+    'drop', 'drops',
+    # Handful
+    'hand', 'handvol', 'handje', 'handjes',
+    'handful', 'handfuls',
+    # Splash
+    'scheut', 'scheutje', 'scheutjes',
+    'splash',
+    # Knife tip
+    'mespunt', 'mespuntje', 'mespuntjes',
+    # Cup (Dutch)
+    'kopje', 'kopjes', 'kop',
+    # Ball / bulb
+    'bol', 'bollen', 'bolletje', 'bolletjes',
+    'bulb', 'bulbs',
+    # Sheet
+    'vel', 'vellen', 'velletje', 'velletjes',
+    'sheet', 'sheets',
+    # Ring
+    'ring', 'ringen', 'ringetje', 'ringetjes',
+    # Strip / bar
+    'reep', 'repen', 'reepje', 'reepjes',
+    'strip', 'strips',
+    # Tuft
+    'pluk', 'plukje', 'plukjes',
+    # Stalk / stem
+    'stengel', 'stengels',
+    'stalk', 'stalks', 'stem', 'stems',
+    # Cluster
+    'tros', 'trosje', 'trosjes', 'trossen',
+    # Bottle
+    'fles', 'flesje', 'flesjes', 'flessen',
+    'bottle', 'bottles',
+    # Container / tray
+    'bakje', 'bakjes',
+    'container', 'containers',
+    # Portion / serving
+    'portie', 'porties',
+    'portion', 'portions', 'serving', 'servings',
+    # Wedge / point
+    'punt', 'puntje', 'puntjes',
+    'wedge', 'wedges',
+    # Cube / block
+    'blokje', 'blokjes',
+    'cube', 'cubes', 'block', 'blocks',
+    # Crown
+    'kroontje', 'kroontjes',
+    'head', 'heads',
+}
+
+
+def parse_ingredient(text: str) -> RecipeIngredient:
+    """Parse an ingredient string like '300 g bloem' into structured data."""
+    match = re.match(r'^(\d+[.,/]?\d*)\s+(.+)$', text)
+
+    if not match:
+        return RecipeIngredient(note=text, originalText=text, isFood=True)
+
+    qty_str = match.group(1).replace(',', '.')
+    if '/' in qty_str:
+        num, den = qty_str.split('/')
+        quantity = float(num) / float(den)
+    else:
+        quantity = float(qty_str)
+
+    rest = match.group(2)
+    words = rest.split()
+    first_word = words[0].lower()
+
+    if first_word in KNOWN_UNITS:
+        unit = IngredientUnit(name=words[0])
+        food_name = ' '.join(words[1:])
+    else:
+        unit = None
+        food_name = rest
+
+    food = IngredientFood(name=food_name) if food_name else None
+
+    return RecipeIngredient(
+        quantity=quantity,
+        unit=unit,
+        food=food,
+        note=text,
+        originalText=text,
+        isFood=True,
+    )
+
+
+def fetch_ah_recipe(url: str) -> Dict[str, Any]:
+    """Fetch and parse a recipe from ah.nl using JSON-LD structured data."""
+    safe_url = re.sub(r'[^a-zA-Z0-9/:._\-?&=%+]', '', url)
+    html = subprocess.check_output(
+        [
+            'curl', '-sL',
+            '-H', 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            '-H', 'Accept: text/html',
+            '-H', 'Accept-Language: nl-NL,nl',
+            safe_url,
+        ],
+        encoding='utf-8',
+        timeout=15,
+    )
+
+    # Extract JSON-LD blocks
+    for match in re.finditer(r'<script type="application/ld\+json">(.+?)</script>', html):
+        try:
+            data = json.loads(match.group(1))
+            if data.get('@type') == 'Recipe':
+                return data
+        except json.JSONDecodeError:
+            continue
+
+    raise ValueError("Geen receptdata gevonden op deze pagina")
 
 
 def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
@@ -138,14 +310,26 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
     @mcp.tool()
     def create_recipe(
-        name: str, ingredients: List[str], instructions: List[str]
+        name: str,
+        ingredients: List[str],
+        instructions: List[str],
+        description: Optional[str] = None,
+        recipe_yield: Optional[str] = None,
+        total_time: Optional[str] = None,
+        org_url: Optional[str] = None,
+        image_url: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Create a new recipe
+        """Create a new recipe with parsed ingredients (quantity, unit, food).
 
         Args:
             name: The name of the new recipe to be created.
-            ingredients: A list of ingredients for the recipe include quantities and units.
+            ingredients: A list of ingredients like "300 g bloem" or "2 tenen knoflook". Quantities and units are automatically parsed.
             instructions: A list of instructions for preparing the recipe.
+            description: Optional description of the recipe.
+            recipe_yield: Optional yield/servings (e.g. "4 porties").
+            total_time: Optional total preparation time (e.g. "15 minuten").
+            org_url: Optional original source URL of the recipe.
+            image_url: Optional URL of an image for the recipe.
 
         Returns:
             Dict[str, Any]: The created recipe details.
@@ -155,13 +339,112 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             slug = mealie.create_recipe(name)
             recipe_json = mealie.get_recipe(slug)
             recipe = Recipe.model_validate(recipe_json)
-            recipe.recipeIngredient = [RecipeIngredient(note=i) for i in ingredients]
+            recipe.recipeIngredient = [parse_ingredient(i) for i in ingredients]
             recipe.recipeInstructions = [
                 RecipeInstruction(text=i) for i in instructions
             ]
-            return mealie.update_recipe(slug, recipe.model_dump(exclude_none=True))
+            if description is not None:
+                recipe.description = description
+            if recipe_yield is not None:
+                recipe.recipeYield = recipe_yield
+            if total_time is not None:
+                recipe.totalTime = total_time
+            if org_url is not None:
+                recipe.orgURL = org_url
+            result = mealie.update_recipe(slug, recipe.model_dump(exclude_none=True))
+
+            if image_url:
+                try:
+                    mealie.scrape_recipe_image_from_url(slug, image_url)
+                except Exception as img_err:
+                    logger.warning({"message": "Failed to set image", "error": str(img_err)})
+
+            return result
         except Exception as e:
             error_msg = f"Error creating recipe '{name}': {str(e)}"
+            logger.error({"message": error_msg})
+            logger.debug(
+                {"message": "Error traceback", "traceback": traceback.format_exc()}
+            )
+            raise ToolError(error_msg)
+
+    @mcp.tool()
+    def import_recipe_from_url(url: str) -> Dict[str, Any]:
+        """Import a recipe from a URL (currently supports ah.nl/allerhande).
+
+        Fetches the recipe page, extracts structured data (JSON-LD), and creates
+        the recipe in Mealie with parsed ingredients (quantity, unit, food),
+        instructions, description, servings, cooking time, and image.
+
+        Args:
+            url: The URL of the recipe page (e.g. https://www.ah.nl/allerhande/recept/R-R.../...)
+
+        Returns:
+            Dict[str, Any]: The created recipe details in Mealie.
+        """
+        try:
+            logger.info({"message": "Importing recipe from URL", "url": url})
+
+            if not re.match(r'https?://(www\.)?ah\.nl/allerhande/recept/', url):
+                raise ValueError("Alleen ah.nl/allerhande URLs worden ondersteund")
+
+            data = fetch_ah_recipe(url)
+
+            name = data.get('name', 'Onbekend recept')
+            ingredients = data.get('recipeIngredient', [])
+            raw_instructions = data.get('recipeInstructions', [])
+            instructions = [
+                step.get('text', '') if isinstance(step, dict) else str(step)
+                for step in raw_instructions
+            ]
+            description = data.get('description', '')
+            recipe_yield = data.get('recipeYield')
+            if recipe_yield:
+                recipe_yield = f"{recipe_yield} porties"
+            total_time = data.get('totalTime', '')
+            # Convert ISO 8601 duration to readable format
+            time_match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?', total_time)
+            if time_match:
+                hours = f"{time_match.group(1)} uur " if time_match.group(1) else ""
+                mins = f"{time_match.group(2)} minuten" if time_match.group(2) else ""
+                total_time = (hours + mins).strip() or None
+            else:
+                total_time = None
+
+            # Find best image
+            image_url = None
+            images = data.get('image', [])
+            if isinstance(images, str):
+                images = [images]
+            for img in images:
+                if img and len(img) > 0:
+                    image_url = img
+                    break
+
+            # Create the recipe
+            slug = mealie.create_recipe(name)
+            recipe_json = mealie.get_recipe(slug)
+            recipe = Recipe.model_validate(recipe_json)
+            recipe.recipeIngredient = [parse_ingredient(i) for i in ingredients]
+            recipe.recipeInstructions = [RecipeInstruction(text=i) for i in instructions]
+            recipe.description = description
+            recipe.orgURL = url
+            if recipe_yield:
+                recipe.recipeYield = recipe_yield
+            if total_time:
+                recipe.totalTime = total_time
+
+            result = mealie.update_recipe(slug, recipe.model_dump(exclude_none=True))
+
+            if image_url:
+                try:
+                    mealie.scrape_recipe_image_from_url(slug, image_url)
+                except Exception as img_err:
+                    logger.warning({"message": "Failed to set image", "error": str(img_err)})
+
+            return result
+        except Exception as e:
+            error_msg = f"Error importing recipe from URL '{url}': {str(e)}"
             logger.error({"message": error_msg})
             logger.debug(
                 {"message": "Error traceback", "traceback": traceback.format_exc()}
@@ -175,10 +458,11 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         instructions: List[str],
     ) -> Dict[str, Any]:
         """Replaces the ingredients and instructions of an existing recipe.
+        Ingredients are automatically parsed into quantity, unit, and food.
 
         Args:
             slug: The unique text identifier for the recipe to be updated.
-            ingredients: A list of ingredients for the recipe include quantities and units.
+            ingredients: A list of ingredients like "300 g bloem". Quantities and units are automatically parsed.
             instructions: A list of instructions for preparing the recipe.
 
         Returns:
@@ -188,7 +472,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             logger.info({"message": "Updating recipe", "slug": slug})
             recipe_json = mealie.get_recipe(slug)
             recipe = Recipe.model_validate(recipe_json)
-            recipe.recipeIngredient = [RecipeIngredient(note=i) for i in ingredients]
+            recipe.recipeIngredient = [parse_ingredient(i) for i in ingredients]
             recipe.recipeInstructions = [
                 RecipeInstruction(text=i) for i in instructions
             ]
