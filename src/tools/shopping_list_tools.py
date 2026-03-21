@@ -77,6 +77,26 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             raise ToolError(error_msg)
 
     @mcp.tool()
+    def update_shopping_list(list_id: str, name: str) -> Dict[str, Any]:
+        """Update a shopping list's properties (e.g. rename it).
+
+        Args:
+            list_id: The UUID of the shopping list to update.
+            name: The new name for the shopping list.
+
+        Returns:
+            Dict[str, Any]: The updated shopping list details.
+        """
+        try:
+            logger.info({"message": "Updating shopping list", "list_id": list_id, "name": name})
+            return mealie.update_shopping_list(list_id, {"name": name})
+        except Exception as e:
+            error_msg = f"Error updating shopping list '{list_id}': {str(e)}"
+            logger.error({"message": error_msg})
+            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
+            raise ToolError(error_msg)
+
+    @mcp.tool()
     def delete_shopping_list(list_id: str) -> Dict[str, Any]:
         """Delete a specific shopping list.
 

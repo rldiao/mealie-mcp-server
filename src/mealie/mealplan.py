@@ -92,6 +92,45 @@ class MealplanMixin:
         )
         return self._handle_request("POST", "/api/households/mealplans", json=payload)
 
+    def update_mealplan(self, entry_id: str, entry_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing mealplan entry.
+
+        Args:
+            entry_id: The UUID of the mealplan entry to update
+            entry_data: Dictionary containing the mealplan entry properties to update
+
+        Returns:
+            JSON response containing the updated mealplan entry
+
+        Raises:
+            MealieApiError: If the API request fails
+        """
+        if not entry_id:
+            raise ValueError("Mealplan entry ID cannot be empty")
+        if not entry_data:
+            raise ValueError("Mealplan entry data cannot be empty")
+
+        logger.info({"message": "Updating mealplan entry", "entry_id": entry_id})
+        return self._handle_request("PUT", f"/api/households/mealplans/{entry_id}", json=entry_data)
+
+    def delete_mealplan(self, entry_id: str) -> Dict[str, Any]:
+        """Delete a mealplan entry.
+
+        Args:
+            entry_id: The UUID of the mealplan entry to delete
+
+        Returns:
+            JSON response confirming deletion
+
+        Raises:
+            MealieApiError: If the API request fails
+        """
+        if not entry_id:
+            raise ValueError("Mealplan entry ID cannot be empty")
+
+        logger.info({"message": "Deleting mealplan entry", "entry_id": entry_id})
+        return self._handle_request("DELETE", f"/api/households/mealplans/{entry_id}")
+
     def get_todays_mealplan(self) -> List[Dict[str, Any]]:
         """Get the mealplan entries for today.
 

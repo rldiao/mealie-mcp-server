@@ -134,6 +134,68 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             raise ToolError(error_msg)
 
     @mcp.tool()
+    def update_mealplan(
+        entry_id: str,
+        date: Optional[str] = None,
+        recipe_id: Optional[str] = None,
+        title: Optional[str] = None,
+        entry_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Update an existing meal plan entry.
+
+        Args:
+            entry_id: The UUID of the mealplan entry to update.
+            date: New date in ISO format (YYYY-MM-DD).
+            recipe_id: UUID of the recipe to assign (optional).
+            title: New title for the entry if not using a recipe (optional).
+            entry_type: Type of entry (breakfast, lunch, dinner, side).
+
+        Returns:
+            Dict[str, Any]: The updated mealplan entry.
+        """
+        try:
+            logger.info({"message": "Updating mealplan entry", "entry_id": entry_id})
+
+            entry_data = {}
+            if date is not None:
+                entry_data["date"] = date
+            if recipe_id is not None:
+                entry_data["recipeId"] = recipe_id
+            if title is not None:
+                entry_data["title"] = title
+            if entry_type is not None:
+                entry_data["entryType"] = entry_type
+
+            if not entry_data:
+                raise ValueError("At least one field must be provided to update")
+
+            return mealie.update_mealplan(entry_id, entry_data)
+        except Exception as e:
+            error_msg = f"Error updating mealplan entry '{entry_id}': {str(e)}"
+            logger.error({"message": error_msg})
+            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
+            raise ToolError(error_msg)
+
+    @mcp.tool()
+    def delete_mealplan(entry_id: str) -> Dict[str, Any]:
+        """Delete a meal plan entry.
+
+        Args:
+            entry_id: The UUID of the mealplan entry to delete.
+
+        Returns:
+            Dict[str, Any]: Confirmation of deletion.
+        """
+        try:
+            logger.info({"message": "Deleting mealplan entry", "entry_id": entry_id})
+            return mealie.delete_mealplan(entry_id)
+        except Exception as e:
+            error_msg = f"Error deleting mealplan entry '{entry_id}': {str(e)}"
+            logger.error({"message": error_msg})
+            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
+            raise ToolError(error_msg)
+
+    @mcp.tool()
     def get_todays_mealplan() -> List[Dict[str, Any]]:
         """Get the mealplan entries for today.
 
