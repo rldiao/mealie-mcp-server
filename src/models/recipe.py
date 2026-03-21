@@ -77,6 +77,12 @@ class RecipeSettings(BaseModel):
     locked: bool = False
 
 
+class RecipeOrganizer(BaseModel):
+    id: str
+    name: str
+    slug: str
+
+
 class Recipe(BaseModel):
     id: str
     userId: str
@@ -88,14 +94,14 @@ class Recipe(BaseModel):
     recipeServings: Optional[int] = None
     recipeYieldQuantity: Optional[int] = 0
     recipeYield: Optional[str] = None
-    totalTime: Optional[int] = None
-    prepTime: Optional[int] = None
-    cookTime: Optional[int] = None
-    performTime: Optional[int] = None
+    totalTime: Optional[str] = None
+    prepTime: Optional[str] = None
+    cookTime: Optional[str] = None
+    performTime: Optional[str] = None
     description: Optional[str] = None
-    recipeCategory: List[str] = Field(default_factory=list)
-    tags: List[str] = Field(default_factory=list)
-    tools: List[str] = Field(default_factory=list)
+    recipeCategory: List[RecipeOrganizer] = Field(default_factory=list)
+    tags: List[RecipeOrganizer] = Field(default_factory=list)
+    tools: List[RecipeOrganizer] = Field(default_factory=list)
     rating: Optional[float] = None
     orgURL: Optional[str] = None
     dateAdded: str
