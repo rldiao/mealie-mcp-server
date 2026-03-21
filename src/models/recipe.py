@@ -94,10 +94,10 @@ class Recipe(BaseModel):
     recipeServings: Optional[int] = None
     recipeYieldQuantity: Optional[int] = 0
     recipeYield: Optional[str] = None
-    totalTime: Optional[int] = None
-    prepTime: Optional[int] = None
-    cookTime: Optional[int] = None
-    performTime: Optional[int] = None
+    totalTime: Optional[str] = None
+    prepTime: Optional[str] = None
+    cookTime: Optional[str] = None
+    performTime: Optional[str] = None
     description: Optional[str] = None
     recipeCategory: List[RecipeOrganizer] = Field(default_factory=list)
     tags: List[RecipeOrganizer] = Field(default_factory=list)

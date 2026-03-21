@@ -101,7 +101,14 @@ class ShoppingListMixin:
             raise ValueError("Shopping list data cannot be empty")
 
         logger.info({"message": "Updating shopping list", "list_id": list_id})
-        return self._handle_request("PUT", f"/api/households/shopping/lists/{list_id}", json=list_data)
+
+        # Fetch current list to preserve required fields (id, groupId, userId, etc.)
+        current_list = self._handle_request("GET", f"/api/households/shopping/lists/{list_id}")
+
+        # Merge caller's changes into the full list object
+        merged_data = {**current_list, **list_data}
+
+        return self._handle_request("PUT", f"/api/households/shopping/lists/{list_id}", json=merged_data)
 
     def delete_shopping_list(self, list_id: str) -> Dict[str, Any]:
         """Delete a specific shopping list.

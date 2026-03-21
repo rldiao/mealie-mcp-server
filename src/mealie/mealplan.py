@@ -111,7 +111,14 @@ class MealplanMixin:
             raise ValueError("Mealplan entry data cannot be empty")
 
         logger.info({"message": "Updating mealplan entry", "entry_id": entry_id})
-        return self._handle_request("PUT", f"/api/households/mealplans/{entry_id}", json=entry_data)
+
+        # Fetch current entry to preserve required fields (id, groupId, userId, recipeId, etc.)
+        current_entry = self._handle_request("GET", f"/api/households/mealplans/{entry_id}")
+
+        # Merge caller's changes into the full entry
+        merged_data = {**current_entry, **entry_data}
+
+        return self._handle_request("PUT", f"/api/households/mealplans/{entry_id}", json=merged_data)
 
     def delete_mealplan(self, entry_id: str) -> Dict[str, Any]:
         """Delete a mealplan entry.
