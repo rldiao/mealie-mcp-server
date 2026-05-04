@@ -62,6 +62,9 @@ This release adds **44+ new API operations** across shopping lists, categories, 
   - `upload_recipe_image_file` - Upload image file (multipart)
   - `upload_recipe_asset_file` - Upload asset/document file (multipart)
 
+- **URL Import**
+  - `import_recipe_from_url` - Create a recipe by scraping a URL using Mealie's server-side scraper (`recipe-scrapers` library); returns the created recipe so callers can verify the scrape result
+
 - **Advanced Filtering**
   - `require_all_tags` - AND logic for tag filtering (default: OR)
   - `require_all_categories` - AND logic for category filtering
