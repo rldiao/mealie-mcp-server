@@ -20,7 +20,7 @@ log_level = getattr(logging, log_level_name.upper(), logging.INFO)
 logging.basicConfig(
     level=log_level,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler(), logging.FileHandler("mealie_mcp_server.log")],
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger("mealie-mcp")
 
