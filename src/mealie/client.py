@@ -97,7 +97,6 @@ class MealieClient:
                 logger.debug({"message": "Response has no content (likely successful DELETE)"})
                 return {"success": True, "message": "Operation completed successfully"}
 
-            # Log the response content at debug level
             try:
                 response_data = response.json()
                 # Normalize JSON null to success dict (common for DELETE operations)
@@ -107,14 +106,10 @@ class MealieClient:
                     )
                     return {"success": True, "message": "Operation completed successfully"}
 
-                logger.debug({"message": "Response content", "data": response_data})
                 return response_data
             except json.JSONDecodeError:
                 # If we can't decode JSON but got a successful response, treat as success
                 if response.status_code >= 200 and response.status_code < 300:
-                    logger.debug(
-                        {"message": "Response content (non-JSON but successful)", "content": response.text}
-                    )
                     if not response.text or response.text.strip() == "":
                         return {"success": True, "message": "Operation completed successfully"}
                     return response.text

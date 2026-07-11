@@ -15,6 +15,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version-file: .python-version
-      - run: uv sync --locked --dev
+      - run: uv sync --locked --extra dev
       - run: uv run ruff check src tests
       - run: uv run pytest -q
