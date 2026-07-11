@@ -40,7 +40,8 @@ class MealieClient:
             )
             # Test connection
             logger.debug({"message": "Testing connection to Mealie API"})
-            self._client.get("/api/app/about")
+            response = self._client.get("/api/app/about")
+            response.raise_for_status()
             logger.info({"message": "Successfully connected to Mealie API"})
         except ConnectError as e:
             error_msg = f"Failed to connect to Mealie API at {base_url}: {str(e)}"
