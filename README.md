@@ -121,7 +121,8 @@ Restart Claude Desktop to load the server.
 - `get_recipes` - List/search recipes with advanced filtering
 - `get_recipe_detailed` - Get complete recipe details
 - `get_recipe_concise` - Get recipe summary
-- `create_recipe` - Create new recipe
+- `create_recipe` - Create new recipe (flat or structured ingredients)
+- `create_recipe_full` - Create a recipe with full content in one call
 - `update_recipe` - Update recipe (full replacement)
 - `patch_recipe` - Update specific fields only
 - `duplicate_recipe` - Clone a recipe
@@ -168,6 +169,28 @@ Restart Claude Desktop to load the server.
 - `update_tag` - Update tag
 - `delete_tag` - Delete tag
 
+### Food Tools (5 operations)
+- `get_foods` - List/search foods (resolve ids for structured ingredients)
+- `create_food` - Create a new food
+- `get_food` - Get by ID
+- `update_food` - Update food
+- `delete_food` - Delete food
+
+### Unit Tools (5 operations)
+- `get_units` - List/search units
+- `create_unit` - Create a new unit
+- `get_unit` - Get by ID
+- `update_unit` - Update unit
+- `delete_unit` - Delete unit
+
+### Recipe Tool Tools (6 operations)
+- `get_tools` - List/search recipe tools (includes `householdsWithTool`)
+- `create_tool` - Create a new tool
+- `get_tool` - Get by ID
+- `get_tool_by_slug` - Get by slug
+- `update_tool` - Update tool
+- `delete_tool` - Delete tool
+
 ### Meal Plan Tools (4 operations)
 
 - `get_all_mealplans` - List meal plans
@@ -175,7 +198,7 @@ Restart Claude Desktop to load the server.
 - `create_mealplan_bulk` - Create multiple entries
 - `get_todays_mealplan` - Get today's meals
 
-**Total: 45 tools** providing comprehensive Mealie API coverage
+**Total: 62 tools** providing comprehensive Mealie API coverage
 
 ## 🔧 Development
 
