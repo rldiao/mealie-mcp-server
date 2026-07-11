@@ -92,51 +92,42 @@ class MealplanMixin:
         )
         return self._handle_request("POST", "/api/households/mealplans", json=payload)
 
-    def update_mealplan(self, entry_id: str, entry_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Update an existing mealplan entry.
-
-        Args:
-            entry_id: The UUID of the mealplan entry to update
-            entry_data: Dictionary containing the mealplan entry properties to update
-
-        Returns:
-            JSON response containing the updated mealplan entry
-
-        Raises:
-            MealieApiError: If the API request fails
-        """
+    def update_mealplan(
+        self, entry_id: str, entry_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Update an entry while preserving fields required by Mealie's PUT."""
         if not entry_id:
             raise ValueError("Mealplan entry ID cannot be empty")
         if not entry_data:
             raise ValueError("Mealplan entry data cannot be empty")
 
         logger.info({"message": "Updating mealplan entry", "entry_id": entry_id})
-
-        # Fetch current entry to preserve required fields (id, groupId, userId, recipeId, etc.)
-        current_entry = self._handle_request("GET", f"/api/households/mealplans/{entry_id}")
-
-        # Merge caller's changes into the full entry
+        current_entry = self._handle_request(
+            "GET", f"/api/households/mealplans/{entry_id}"
+        )
         merged_data = {**current_entry, **entry_data}
+        return self._handle_request(
+            "PUT", f"/api/households/mealplans/{entry_id}", json=merged_data
+        )
 
-        return self._handle_request("PUT", f"/api/households/mealplans/{entry_id}", json=merged_data)
-
-    def delete_mealplan(self, entry_id: str) -> Dict[str, Any]:
-        """Delete a mealplan entry.
+    def delete_mealplan(self, item_id: str) -> Dict[str, Any]:
+        """Delete a specific mealplan entry.
 
         Args:
-            entry_id: The UUID of the mealplan entry to delete
+            item_id: The ID of the mealplan entry to delete
 
         Returns:
             JSON response confirming deletion
 
         Raises:
+            ValueError: If item_id is empty
             MealieApiError: If the API request fails
         """
-        if not entry_id:
+        if not item_id:
             raise ValueError("Mealplan entry ID cannot be empty")
 
-        logger.info({"message": "Deleting mealplan entry", "entry_id": entry_id})
-        return self._handle_request("DELETE", f"/api/households/mealplans/{entry_id}")
+        logger.info({"message": "Deleting mealplan entry", "item_id": item_id})
+        return self._handle_request("DELETE", f"/api/households/mealplans/{item_id}")
 
     def get_todays_mealplan(self) -> List[Dict[str, Any]]:
         """Get the mealplan entries for today.

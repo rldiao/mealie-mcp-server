@@ -31,9 +31,9 @@ This document compares the MCP server implementation against the official Mealie
 - ✅ `POST /api/recipes/{slug}/assets` - Upload asset file
 - ✅ `GET /api/recipes/suggestions` - Get recipe suggestions (via search)
 - ✅ Advanced filtering with AND/OR logic for tags/categories
+- ✅ `POST /api/recipes/create/url` - Create from URL
 
 **Not Yet Implemented:**
-- ⏳ `POST /api/recipes/create/url` - Create from URL
 - ⏳ `POST /api/recipes/create/url/bulk` - Bulk create from URLs
 - ⏳ `POST /api/recipes/create/zip` - Create from ZIP
 - ⏳ `POST /api/recipes/create/html-or-json` - Create from HTML/JSON

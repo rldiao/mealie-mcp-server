@@ -2,6 +2,65 @@
 
 All notable changes to the Mealie MCP Server.
 
+## [Unreleased]
+
+### ✨ New Features
+
+- **`create_recipe_full`** - Create a recipe and populate all of its content
+  in a single call: description, timing (total/prep/cook/perform), servings,
+  source URL (`orgURL`), structured or flat ingredients, preparation steps, and
+  an optional image scraped from a URL.
+- **Structured ingredients & step links** - `create_recipe` and `update_recipe`
+  now accept, per item, either a flat string (parsed by Mealie's NLP as before)
+  or a structured object with `quantity`, `note`, `title`, `referenceId`, and an
+  existing Mealie `unit`/`food`. Instruction steps accept `ingredientReferences`
+  to enable Mealie's cook-mode highlighting; `referenceId` accepts any string
+  (mapped to a stable UUID v4, which Mealie requires) — reuse the same value on
+  a step to keep the link. Flat-string usage is unchanged.
+- **`patch_recipe`** - Added `org_url`, `prep_time`, `cook_time`, `perform_time`,
+  and `servings` to the partial-update fields.
+- **Foods, units & tools management** - Full CRUD for the household's foods
+  (`get_foods`, `create_food`, `get_food`, `update_food`, `delete_food`), units
+  (same set), and recipe tools (same set plus `get_tool_by_slug`). The `get_*`
+  lookups resolve ids for structured ingredients and tool assignment without
+  hardcoding UUIDs; `get_tools` exposes `householdsWithTool` to distinguish
+  owned tools from database-only entries.
+- **Tag & tool assignment** - `create_recipe_full` and `patch_recipe` accept
+  `tags` and `tools` (each `{ id, name }`; the `slug` Mealie requires is derived
+  from the name when omitted) to assign existing organizers.
+- **`get_recipe_concise`** - Now also returns `orgURL`, `tags`, and `tools`,
+  enabling a lightweight duplicate check by source URL.
+
+### 🐛 Bug Fixes
+
+- **Recipe time fields typed as text** - `Recipe.totalTime`/`prepTime`/`cookTime`/
+  `performTime` were typed as `int` but the Mealie API returns them as strings
+  (e.g. `"30 Minutes"`, `"PT35M"`). Validating such recipes raised
+  `Input should be a valid integer` in `get_recipe_concise`, `create_recipe`, and
+  `update_recipe`. They are now typed as `str`, matching the API.
+- **Instruction ingredient references typed as objects** -
+  `RecipeInstruction.ingredientReferences` was typed as `list[str]`; the Mealie
+  API uses `[{ "referenceId": ... }]`. It is now typed accordingly so recipes
+  with step/ingredient links validate.
+- **Tags/tools/categories typed as objects** - `Recipe.tags`, `Recipe.tools`,
+  and `Recipe.recipeCategory` were typed as `list[str]` but the Mealie API
+  returns objects (`{ id, name, slug }`). Validating a recipe that has any of
+  these raised `Input should be a valid string`; they are now typed as objects.
+
+### 🧪 Tests
+
+- Added a `pytest` suite (`tests/`) covering the recipe-authoring tools
+  (structured ingredients, `create_recipe_full`, `patch_recipe`,
+  `get_recipe_concise`), the foods/units/tools CRUD tools, and the model
+  typing fixes. Tests run offline against a fake Mealie client that records
+  the HTTP requests the mixins build. `pytest`/`pytest-asyncio` added to the
+  `dev` extra.
+
+### 🔄 Breaking Changes
+
+**None** - Existing flat-string calls to `create_recipe`/`update_recipe` and the
+previous `patch_recipe` fields continue to work unchanged.
+
 ## [Unreleased] - 2025-01-05
 
 ### 🎉 Major Feature Additions
@@ -61,6 +120,9 @@ This release adds **44+ new API operations** across shopping lists, categories, 
   - `set_recipe_image_from_url` - Scrape and set recipe image from URL
   - `upload_recipe_image_file` - Upload image file (multipart)
   - `upload_recipe_asset_file` - Upload asset/document file (multipart)
+
+- **URL Import**
+  - `import_recipe_from_url` - Create a recipe by scraping a URL using Mealie's server-side scraper (`recipe-scrapers` library); returns the created recipe so callers can verify the scrape result
 
 - **Advanced Filtering**
   - `require_all_tags` - AND logic for tag filtering (default: OR)
