@@ -7,6 +7,7 @@ A comprehensive Model Context Protocol (MCP) server that enables AI assistants t
 ## ✨ Features
 
 ### 🍽️ Recipe Management
+
 - **CRUD Operations**: Create, read, update, patch, duplicate, and delete recipes
 - **Advanced Search**: Filter by text, categories, tags, and tools with AND/OR logic
 - **Image Management**: Upload images or scrape from URLs
@@ -14,18 +15,21 @@ A comprehensive Model Context Protocol (MCP) server that enables AI assistants t
 - **Metadata Tracking**: Mark recipes as made, track last made dates
 
 ### 🛒 Shopping Lists
+
 - **List Management**: Create, update, and delete shopping lists
 - **Item Operations**: Add, update, check off, and remove items
 - **Bulk Operations**: Create, update, or delete multiple items at once
 - **Recipe Integration**: Automatically add recipe ingredients to shopping lists
 
 ### 🏷️ Organization
+
 - **Categories**: Organize recipes with categories (Breakfast, Dinner, etc.)
 - **Tags**: Tag recipes for easy filtering (Quick, Healthy, Family Favorite)
 - **Advanced Filtering**: Search and filter with full pagination support
 - **Empty Detection**: Find unused categories and tags
 
 ### 📅 Meal Planning
+
 - **Meal Plans**: View and manage meal plans
 - **Bulk Creation**: Add multiple meals at once
 - **Today's Menu**: Quick access to today's planned meals
@@ -50,21 +54,16 @@ fastmcp install src/server.py \
   --env-var MEALIE_API_KEY=your-mealie-api-key
 ```
 
-#### Option 2: Manual Configuration
+#### Option 2: Using uvx
 
-Add the server to your `claude_desktop_config.json`:
+Run directly from GitHub without cloning:
 
 ```json
 {
   "mcpServers": {
     "mealie-mcp-server": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "/path/to/repo/src",
-        "run",
-        "server.py"
-      ],
+      "command": "uvx",
+      "args": ["git+https://github.com/rldiao/mealie-mcp-server"],
       "env": {
         "MEALIE_BASE_URL": "https://your-mealie-instance.com",
         "MEALIE_API_KEY": "your-mealie-api-key"
@@ -117,7 +116,8 @@ Restart Claude Desktop to load the server.
 
 ## 🎯 Available Tools
 
-### Recipe Tools (14 operations)
+### Recipe Tools (13 operations)
+
 - `get_recipes` - List/search recipes with advanced filtering
 - `get_recipe_detailed` - Get complete recipe details
 - `get_recipe_concise` - Get recipe summary
@@ -133,6 +133,7 @@ Restart Claude Desktop to load the server.
 - `delete_recipe` - Delete recipe
 
 ### Shopping List Tools (14 operations)
+
 - `get_shopping_lists` - List all shopping lists
 - `create_shopping_list` - Create new list
 - `get_shopping_list` - Get list by ID
@@ -149,6 +150,7 @@ Restart Claude Desktop to load the server.
 - `delete_shopping_list_items_bulk` - Delete multiple items
 
 ### Category Tools (7 operations)
+
 - `get_categories` - List/search categories
 - `get_empty_categories` - Find unused categories
 - `create_category` - Create new category
@@ -158,6 +160,7 @@ Restart Claude Desktop to load the server.
 - `delete_category` - Delete category
 
 ### Tag Tools (7 operations)
+
 - `get_tags` - List/search tags
 - `get_empty_tags` - Find unused tags
 - `create_tag` - Create new tag
@@ -189,6 +192,7 @@ Restart Claude Desktop to load the server.
 - `delete_tool` - Delete tool
 
 ### Meal Plan Tools (4 operations)
+
 - `get_all_mealplans` - List meal plans
 - `create_mealplan` - Create meal plan entry
 - `create_mealplan_bulk` - Create multiple entries
@@ -201,23 +205,27 @@ Restart Claude Desktop to load the server.
 ### Setup
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd mealie-mcp-server
 ```
 
 2. Install dependencies:
+
 ```bash
 uv sync
 ```
 
 3. Configure environment:
+
 ```bash
 cp .env.template .env
 # Edit .env with your Mealie instance details
 ```
 
 4. Run MCP inspector for testing:
+
 ```bash
 uv run mcp dev src/server.py
 ```
@@ -256,11 +264,13 @@ mealie-mcp-server/
 When filtering recipes, you **must use slugs or UUIDs**, not display names:
 
 ✅ **Correct:**
+
 ```
 "Get recipes with tags=['quick-meals', 'healthy']"
 ```
 
 ❌ **Incorrect:**
+
 ```
 "Get recipes with tags=['Quick Meals', 'Healthy']"
 ```
@@ -301,6 +311,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 For issues and questions:
+
 - Check the [CHANGELOG.md](CHANGELOG.md) for recent updates
 - Review the Mealie API documentation
 - Open an issue on GitHub

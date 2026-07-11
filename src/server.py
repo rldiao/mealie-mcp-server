@@ -20,7 +20,7 @@ log_level = getattr(logging, log_level_name.upper(), logging.INFO)
 logging.basicConfig(
     level=log_level,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler(), logging.FileHandler("mealie_mcp_server.log")],
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger("mealie-mcp")
 
@@ -46,7 +46,8 @@ except Exception as e:
 register_prompts(mcp)
 register_all_tools(mcp, mealie)
 
-if __name__ == "__main__":
+
+def main():
     try:
         logger.info({"message": "Starting Mealie MCP Server"})
         mcp.run(transport="stdio")
@@ -58,3 +59,7 @@ if __name__ == "__main__":
             {"message": "Error traceback", "traceback": traceback.format_exc()}
         )
         raise
+
+
+if __name__ == "__main__":
+    main()
