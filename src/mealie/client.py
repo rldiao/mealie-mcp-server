@@ -72,17 +72,9 @@ class MealieClient:
                     "message": "Making API request",
                     "method": method,
                     "url": url,
-                    "body": kwargs.get("json"),
                     "has_files": "files" in kwargs,
                 }
             )
-
-            if "params" in kwargs:
-                logger.debug(
-                    {"message": "Request parameters", "params": kwargs["params"]}
-                )
-            if "json" in kwargs:
-                logger.debug({"message": "Request payload", "payload": kwargs["json"]})
             if "files" in kwargs:
                 logger.debug({"message": "Request has file upload"})
 
@@ -108,7 +100,6 @@ class MealieClient:
             # Log the response content at debug level
             try:
                 response_data = response.json()
-
                 # Normalize JSON null to success dict (common for DELETE operations)
                 if response_data is None:
                     logger.debug(
@@ -128,9 +119,6 @@ class MealieClient:
                         return {"success": True, "message": "Operation completed successfully"}
                     return response.text
                 else:
-                    logger.debug(
-                        {"message": "Response content (non-JSON)", "content": response.text}
-                    )
                     return response.text
 
         except HTTPStatusError as e:
@@ -152,9 +140,6 @@ class MealieClient:
                     "status_code": status_code,
                     "error_detail": error_detail,
                 }
-            )
-            logger.debug(
-                {"message": "Failed Request body", "content": e.request.content}
             )
             raise MealieApiError(status_code, error_msg, e.response.text) from e
 
