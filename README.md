@@ -304,7 +304,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Credits
 
-- Based on the original [mealie-mcp-server](https://github.com/rldiao/mealie-mcp-server) by [@rldiao](https://github.com/rldiao)
 - [Mealie](https://github.com/mealie-recipes/mealie) - The recipe management system
 - [FastMCP](https://github.com/jlowin/fastmcp) - The MCP framework
 
