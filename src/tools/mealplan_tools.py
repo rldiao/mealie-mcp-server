@@ -134,6 +134,27 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             raise ToolError(error_msg)
 
     @mcp.tool()
+    def delete_mealplan(item_id: str) -> Dict[str, Any]:
+        """Delete a specific meal plan entry.
+
+        Args:
+            item_id: The ID of the mealplan entry to delete
+
+        Returns:
+            Dict[str, Any]: Confirmation of deletion
+        """
+        try:
+            logger.info({"message": "Deleting mealplan entry", "item_id": item_id})
+            return mealie.delete_mealplan(item_id)
+        except Exception as e:
+            error_msg = f"Error deleting mealplan entry '{item_id}': {str(e)}"
+            logger.error({"message": error_msg})
+            logger.debug(
+                {"message": "Error traceback", "traceback": traceback.format_exc()}
+            )
+            raise ToolError(error_msg)
+
+    @mcp.tool()
     def get_todays_mealplan() -> List[Dict[str, Any]]:
         """Get the mealplan entries for today.
 
