@@ -26,4 +26,14 @@ use_parentheses = true
 ensure_newline_before_comments = true
 
 [project.optional-dependencies]
-dev = ["black>=24.1.0", "isort>=5.13.0"]
+dev = [
+    "black>=24.1.0",
+    "isort>=5.13.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
