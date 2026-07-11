@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# macOS metadata
+.DS_Store
+
 # C extensions
 *.so
 
@@ -169,6 +172,11 @@ cython_debug/
 
 # Ruff stuff:
 .ruff_cache/
+
+# Local development and generated copies
+docker/debug/
+src/examples.py
+src/openapi.json
 
 # PyPI configuration file
 .pypirc
