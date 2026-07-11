@@ -24,7 +24,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger("mealie-mcp")
 
-mcp = FastMCP("mealie")
+mcp = FastMCP(
+    "mealie",
+    host=os.getenv("HOST", "0.0.0.0"),
+    port=int(os.getenv("PORT", "8000")),
+)
 
 MEALIE_BASE_URL = os.getenv("MEALIE_BASE_URL")
 MEALIE_API_KEY = os.getenv("MEALIE_API_KEY")
@@ -50,7 +54,7 @@ register_all_tools(mcp, mealie)
 def main():
     try:
         logger.info({"message": "Starting Mealie MCP Server"})
-        mcp.run(transport="stdio")
+        mcp.run(transport="streamable-http")
     except Exception as e:
         logger.critical(
             {"message": "Fatal error in Mealie MCP Server", "error": str(e)}
