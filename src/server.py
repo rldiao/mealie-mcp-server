@@ -1,3 +1,4 @@
+import atexit
 import logging
 import os
 import traceback
@@ -42,6 +43,8 @@ except Exception as e:
     logger.error({"message": "Failed to initialize Mealie client", "error": str(e)})
     logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
     raise
+
+atexit.register(mealie.close)
 
 register_prompts(mcp)
 register_all_tools(mcp, mealie)

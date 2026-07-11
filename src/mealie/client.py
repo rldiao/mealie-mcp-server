@@ -170,3 +170,7 @@ class MealieClient:
                 {"message": "Error traceback", "traceback": traceback.format_exc()}
             )
             raise
+
+    def close(self) -> None:
+        """Release the underlying HTTP connection pool."""
+        self._client.close()
