@@ -658,6 +658,77 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             raise ToolError(error_msg)
 
     @mcp.tool()
+    def set_recipe_categories(slug: str, category_ids: List[str]) -> Dict[str, Any]:
+        """Set the categories for a recipe, replacing any existing categories.
+        Use get_categories() first to find valid category IDs.
+        Passing an empty list will remove all categories from the recipe.
+
+        Args:
+            slug: The unique text identifier for the recipe.
+            category_ids: List of category UUIDs to assign.
+
+        Returns:
+            Dict[str, Any]: The updated recipe details.
+        """
+        try:
+            logger.info({"message": "Setting recipe categories", "slug": slug, "category_ids": category_ids})
+            return mealie.set_recipe_categories(slug, category_ids)
+        except Exception as e:
+            error_msg = f"Error setting categories on recipe '{slug}': {str(e)}"
+            logger.error({"message": error_msg})
+            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
+            raise ToolError(error_msg)
+
+    @mcp.tool()
+    def set_recipe_tags(slug: str, tag_ids: List[str]) -> Dict[str, Any]:
+        """Set the tags for a recipe, replacing any existing tags.
+        Use get_tags() first to find valid tag IDs.
+        Passing an empty list will remove all tags from the recipe.
+
+        Args:
+            slug: The unique text identifier for the recipe.
+            tag_ids: List of tag UUIDs to assign.
+
+        Returns:
+            Dict[str, Any]: The updated recipe details.
+        """
+        try:
+            logger.info({"message": "Setting recipe tags", "slug": slug, "tag_ids": tag_ids})
+            return mealie.set_recipe_tags(slug, tag_ids)
+        except Exception as e:
+            error_msg = f"Error setting tags on recipe '{slug}': {str(e)}"
+            logger.error({"message": error_msg})
+            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
+            raise ToolError(error_msg)
+
+    @mcp.tool()
+    def update_recipe_categories_and_tags(
+        slug: str,
+        category_ids: Optional[List[str]] = None,
+        tag_ids: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Update categories and/or tags for a recipe in a single API call.
+        Use get_categories() and get_tags() first to find valid IDs.
+        Passing an empty list for either field will clear it; omitting (None) leaves it unchanged.
+
+        Args:
+            slug: The unique text identifier for the recipe.
+            category_ids: List of category UUIDs to assign (omit to leave unchanged).
+            tag_ids: List of tag UUIDs to assign (omit to leave unchanged).
+
+        Returns:
+            Dict[str, Any]: The updated recipe details.
+        """
+        try:
+            logger.info({"message": "Updating recipe categories and tags", "slug": slug})
+            return mealie.set_recipe_categories_and_tags(slug, category_ids=category_ids, tag_ids=tag_ids)
+        except Exception as e:
+            error_msg = f"Error updating categories/tags on recipe '{slug}': {str(e)}"
+            logger.error({"message": error_msg})
+            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
+            raise ToolError(error_msg)
+
+    @mcp.tool()
     def delete_recipe(slug: str) -> Dict[str, Any]:
         """Delete a recipe permanently.
 

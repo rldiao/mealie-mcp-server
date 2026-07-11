@@ -92,6 +92,24 @@ class MealplanMixin:
         )
         return self._handle_request("POST", "/api/households/mealplans", json=payload)
 
+    def update_mealplan(
+        self, entry_id: str, entry_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Update an entry while preserving fields required by Mealie's PUT."""
+        if not entry_id:
+            raise ValueError("Mealplan entry ID cannot be empty")
+        if not entry_data:
+            raise ValueError("Mealplan entry data cannot be empty")
+
+        logger.info({"message": "Updating mealplan entry", "entry_id": entry_id})
+        current_entry = self._handle_request(
+            "GET", f"/api/households/mealplans/{entry_id}"
+        )
+        merged_data = {**current_entry, **entry_data}
+        return self._handle_request(
+            "PUT", f"/api/households/mealplans/{entry_id}", json=merged_data
+        )
+
     def delete_mealplan(self, item_id: str) -> Dict[str, Any]:
         """Delete a specific mealplan entry.
 

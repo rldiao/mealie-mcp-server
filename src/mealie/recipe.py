@@ -159,6 +159,69 @@ class RecipeMixin:
         logger.info({"message": "Patching recipe", "slug": slug})
         return self._handle_request("PATCH", f"/api/recipes/{slug}", json=recipe_data)
 
+    def set_recipe_categories(self, slug: str, category_ids: List[str]) -> Dict[str, Any]:
+        """Set the categories for a recipe, replacing any existing categories.
+
+        Args:
+            slug: The slug identifier of the recipe
+            category_ids: List of category UUIDs to assign
+
+        Returns:
+            JSON response containing the updated recipe details
+        """
+        if not slug:
+            raise ValueError("Recipe slug cannot be empty")
+
+        logger.info({"message": "Setting recipe categories", "slug": slug, "category_ids": category_ids})
+        categories = [self.get_category(cid) for cid in category_ids]
+        return self._handle_request("PATCH", f"/api/recipes/{slug}", json={"recipeCategory": categories})
+
+    def set_recipe_tags(self, slug: str, tag_ids: List[str]) -> Dict[str, Any]:
+        """Set the tags for a recipe, replacing any existing tags.
+
+        Args:
+            slug: The slug identifier of the recipe
+            tag_ids: List of tag UUIDs to assign
+
+        Returns:
+            JSON response containing the updated recipe details
+        """
+        if not slug:
+            raise ValueError("Recipe slug cannot be empty")
+
+        logger.info({"message": "Setting recipe tags", "slug": slug, "tag_ids": tag_ids})
+        tags = [self.get_tag(tid) for tid in tag_ids]
+        return self._handle_request("PATCH", f"/api/recipes/{slug}", json={"tags": tags})
+
+    def set_recipe_categories_and_tags(
+        self,
+        slug: str,
+        category_ids: Optional[List[str]] = None,
+        tag_ids: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Update categories and/or tags for a recipe in a single API call.
+
+        Args:
+            slug: The slug identifier of the recipe
+            category_ids: List of category UUIDs to assign (None = leave unchanged)
+            tag_ids: List of tag UUIDs to assign (None = leave unchanged)
+
+        Returns:
+            JSON response containing the updated recipe details
+        """
+        if not slug:
+            raise ValueError("Recipe slug cannot be empty")
+        if category_ids is None and tag_ids is None:
+            raise ValueError("At least one of category_ids or tag_ids must be provided")
+
+        logger.info({"message": "Setting recipe categories and tags", "slug": slug})
+        recipe_data = {}
+        if category_ids is not None:
+            recipe_data["recipeCategory"] = [self.get_category(cid) for cid in category_ids]
+        if tag_ids is not None:
+            recipe_data["tags"] = [self.get_tag(tid) for tid in tag_ids]
+        return self._handle_request("PATCH", f"/api/recipes/{slug}", json=recipe_data)
+
     def duplicate_recipe(self, slug: str, name: Optional[str] = None) -> Dict[str, Any]:
         """Duplicate an existing recipe
 

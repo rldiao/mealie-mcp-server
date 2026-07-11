@@ -134,6 +134,36 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             raise ToolError(error_msg)
 
     @mcp.tool()
+    def update_mealplan(
+        entry_id: str,
+        date: Optional[str] = None,
+        recipe_id: Optional[str] = None,
+        title: Optional[str] = None,
+        entry_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Update selected fields on an existing meal-plan entry."""
+        try:
+            entry_data = {}
+            if date is not None:
+                entry_data["date"] = date
+            if recipe_id is not None:
+                entry_data["recipeId"] = recipe_id
+            if title is not None:
+                entry_data["title"] = title
+            if entry_type is not None:
+                entry_data["entryType"] = entry_type
+            if not entry_data:
+                raise ValueError("At least one field must be provided to update")
+            return mealie.update_mealplan(entry_id, entry_data)
+        except Exception as e:
+            error_msg = f"Error updating mealplan entry '{entry_id}': {str(e)}"
+            logger.error({"message": error_msg})
+            logger.debug(
+                {"message": "Error traceback", "traceback": traceback.format_exc()}
+            )
+            raise ToolError(error_msg)
+
+    @mcp.tool()
     def delete_mealplan(item_id: str) -> Dict[str, Any]:
         """Delete a specific meal plan entry.
 

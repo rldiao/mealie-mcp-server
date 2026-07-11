@@ -75,6 +75,28 @@ class FakeFetcher(MealieFetcher):
                 "pluralName": "Existings",
                 "description": "old",
             }
+        if method == "GET" and url.startswith("/api/organizers/categories/"):
+            item_id = url.rsplit("/", 1)[-1]
+            return {"id": item_id, "name": "Category", "slug": "category"}
+        if method == "GET" and url.startswith("/api/organizers/tags/"):
+            item_id = url.rsplit("/", 1)[-1]
+            return {"id": item_id, "name": "Tag", "slug": "tag"}
+        if method == "GET" and url.startswith("/api/households/mealplans/"):
+            return {
+                "id": url.rsplit("/", 1)[-1],
+                "groupId": "group-1",
+                "userId": "user-1",
+                "date": "2026-07-12",
+                "entryType": "dinner",
+                "title": "Existing meal",
+            }
+        if method == "GET" and url.startswith("/api/households/shopping/lists/"):
+            return {
+                "id": url.rsplit("/", 1)[-1],
+                "groupId": "group-1",
+                "userId": "user-1",
+                "name": "Existing list",
+            }
         # list endpoints
         if method == "GET" and url in (
             "/api/foods",
