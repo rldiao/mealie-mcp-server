@@ -115,6 +115,32 @@ class RecipeMixin:
         logger.info({"message": "Creating new recipe", "name": name})
         return self._handle_request("POST", "/api/recipes", json={"name": name})
 
+    def import_recipe_from_url(
+        self, url: str, include_tags: bool = False
+    ) -> str:
+        """Create a recipe by scraping a URL using Mealie's built-in scraper
+
+        Mealie's server uses the `recipe-scrapers` library, which has built-in
+        adapters for major recipe sites and falls back to JSON-LD/Schema.org
+        parsing for other sites.
+
+        Args:
+            url: Source URL of the recipe to import
+            include_tags: If True, import tags Mealie extracts from the source
+
+        Returns:
+            Slug of the newly created recipe
+        """
+        if not url:
+            raise ValueError("URL cannot be empty")
+
+        logger.info({"message": "Importing recipe from URL", "url": url})
+        return self._handle_request(
+            "POST",
+            "/api/recipes/create/url",
+            json={"url": url, "includeTags": include_tags},
+        )
+
     def patch_recipe(self, slug: str, recipe_data: Dict[str, Any]) -> Dict[str, Any]:
         """Partially update a recipe (only updates provided fields)
 

@@ -276,6 +276,45 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             raise ToolError(error_msg)
 
     @mcp.tool()
+    def import_recipe_from_url(
+        url: str, include_tags: bool = False
+    ) -> Dict[str, Any]:
+        """Import a recipe into Mealie by scraping a URL.
+
+        Uses Mealie's server-side scraper (the `recipe-scrapers` library), which
+        has built-in adapters for many recipe sites and falls back to
+        JSON-LD/Schema.org parsing for sites without a dedicated adapter.
+        Coverage varies by Mealie version; URLs the scraper can't parse return
+        a 400 from Mealie.
+
+        The created recipe is fetched and returned so the caller can verify the
+        scrape result. Some sources (notably paywalled URLs that redirect) can
+        cause the scraper to land on the wrong page and silently return the
+        wrong recipe — always confirm the returned `name` matches what was
+        requested.
+
+        Args:
+            url: Source URL of the recipe to import.
+            include_tags: If True, import tags Mealie extracts from the source.
+                Defaults to False.
+
+        Returns:
+            Dict[str, Any]: The created recipe, including slug, name,
+            ingredients, and instructions.
+        """
+        try:
+            logger.info({"message": "Importing recipe from URL", "url": url})
+            slug = mealie.import_recipe_from_url(url, include_tags=include_tags)
+            return mealie.get_recipe(slug)
+        except Exception as e:
+            error_msg = f"Error importing recipe from URL '{url}': {str(e)}"
+            logger.error({"message": error_msg})
+            logger.debug(
+                {"message": "Error traceback", "traceback": traceback.format_exc()}
+            )
+            raise ToolError(error_msg)
+
+    @mcp.tool()
     def update_recipe(
         slug: str,
         ingredients: List[Union[str, RecipeIngredientInput]],
