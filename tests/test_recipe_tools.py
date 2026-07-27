@@ -1,5 +1,8 @@
 """Tests for the recipe-authoring tools (structured ingredients, full create,
-patch fields, concise output)."""
+patch fields, concise output, image and asset uploads)."""
+
+import pytest
+from mcp.server.fastmcp.exceptions import ToolError
 
 
 async def test_create_recipe_accepts_flat_and_structured(invoke, fetcher):
@@ -120,3 +123,109 @@ async def test_get_recipe_concise_includes_orgurl_tags_tools(invoke, fetcher):
     assert out["orgURL"] == "https://example.com/r"
     assert out["tags"] == [{"id": "t1", "name": "Quick", "slug": "quick"}]
     assert out["tools"][0]["name"] == "Pfanne"
+
+
+@pytest.mark.parametrize(
+    "file_name,explicit_extension,expected",
+    [
+        ("photo.jpg", None, "jpg"),
+        ("photo.JPEG", None, "jpeg"),
+        ("photo with spaces.png", None, "png"),
+        ("archive.tar.webp", None, "webp"),
+        ("photo.jpg", "png", "png"),
+        # a leading dot is accepted and stripped, like Mealie itself does
+        ("photo.jpg", ".png", "png"),
+    ],
+)
+async def test_upload_recipe_image_sends_extension_form_field(
+    invoke, fetcher, tmp_path, file_name, explicit_extension, expected
+):
+    """Mealie's PUT /recipes/{slug}/image requires a separate `extension` form
+    field; omitting it returns 422 Field required."""
+    path = tmp_path / file_name
+    path.write_bytes(b"image-bytes")
+
+    kwargs = {} if explicit_extension is None else {"extension": explicit_extension}
+    await invoke(
+        "upload_recipe_image_file", slug="test-recipe", image_path=str(path), **kwargs
+    )
+
+    req = fetcher.last("PUT", "/api/recipes/test-recipe/image")
+    assert req["data"] == {"extension": expected}
+    assert req["files"]["image"] == (file_name, b"image-bytes")
+    assert req["json"] is None
+
+
+async def test_upload_recipe_image_rejects_missing_file(invoke, fetcher, tmp_path):
+    with pytest.raises(ToolError):
+        await invoke(
+            "upload_recipe_image_file",
+            slug="test-recipe",
+            image_path=str(tmp_path / "nope.jpg"),
+        )
+    assert fetcher.last("PUT", "/image") is None
+
+
+async def test_upload_recipe_image_rejects_file_without_extension(
+    invoke, fetcher, tmp_path
+):
+    path = tmp_path / "photo"
+    path.write_bytes(b"image-bytes")
+
+    with pytest.raises(ToolError):
+        await invoke(
+            "upload_recipe_image_file", slug="test-recipe", image_path=str(path)
+        )
+    assert fetcher.last("PUT", "/image") is None
+
+
+async def test_upload_recipe_asset_sends_name_icon_and_extension(
+    invoke, fetcher, tmp_path
+):
+    """POST /recipes/{slug}/assets requires name, icon and extension form fields."""
+    path = tmp_path / "nutrition notes.pdf"
+    path.write_bytes(b"asset-bytes")
+
+    out = await invoke(
+        "upload_recipe_asset_file", slug="test-recipe", asset_path=str(path)
+    )
+
+    req = fetcher.last("POST", "/api/recipes/test-recipe/assets")
+    assert req["data"] == {
+        "name": "nutrition notes",
+        "icon": "mdi-file",
+        "extension": "pdf",
+    }
+    assert req["files"]["file"] == ("nutrition notes.pdf", b"asset-bytes")
+    assert out["fileName"] == "nutrition notes.pdf"
+
+
+async def test_upload_recipe_asset_honors_explicit_fields(invoke, fetcher, tmp_path):
+    path = tmp_path / "scan.pdf"
+    path.write_bytes(b"asset-bytes")
+
+    await invoke(
+        "upload_recipe_asset_file",
+        slug="test-recipe",
+        asset_path=str(path),
+        name="Original scan",
+        icon="mdi-file-pdf-box",
+        extension="PDF",
+    )
+
+    req = fetcher.last("POST", "/assets")
+    assert req["data"] == {
+        "name": "Original scan",
+        "icon": "mdi-file-pdf-box",
+        "extension": "pdf",
+    }
+
+
+async def test_upload_recipe_asset_rejects_missing_file(invoke, fetcher, tmp_path):
+    with pytest.raises(ToolError):
+        await invoke(
+            "upload_recipe_asset_file",
+            slug="test-recipe",
+            asset_path=str(tmp_path / "nope.pdf"),
+        )
+    assert fetcher.last("POST", "/assets") is None

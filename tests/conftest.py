@@ -51,6 +51,8 @@ class FakeFetcher(MealieFetcher):
                 "url": url,
                 "json": kwargs.get("json"),
                 "params": kwargs.get("params"),
+                "files": kwargs.get("files"),
+                "data": kwargs.get("data"),
             }
         )
         if method == "POST" and url == "/api/recipes":
@@ -61,6 +63,15 @@ class FakeFetcher(MealieFetcher):
             return self.created_slug
         if method == "GET" and url.startswith("/api/recipes/") and url.count("/") == 3:
             return dict(self.recipe)
+        if method == "PUT" and url.endswith("/image"):
+            return {"image": "1"}
+        if method == "POST" and url.endswith("/assets"):
+            data = kwargs.get("data") or {}
+            return {
+                "name": data.get("name"),
+                "icon": data.get("icon"),
+                "fileName": f"{data.get('name')}.{data.get('extension')}",
+            }
         if method in ("PUT", "PATCH") and url.startswith("/api/recipes/"):
             return kwargs.get("json", {})
         # single-record GET (the fetch-merge update path reads the existing record)
