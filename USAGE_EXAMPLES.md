@@ -80,6 +80,17 @@ And these instructions:
 "Update the yield of the soup recipe to '6 servings'"
 ```
 
+### Notes
+
+```
+"Add a note to the sourdough recipe titled 'Storage': keeps 4 days wrapped
+ in a tea towel, or 3 months frozen"
+"Add a substitution note to the brownies: swap the butter for coconut oil
+ to make it dairy-free"
+```
+
+Notes are replaced as a set, so ask for every note you want to keep.
+
 ### Recipe Images
 
 **From URL:**

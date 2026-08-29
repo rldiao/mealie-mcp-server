@@ -1,12 +1,15 @@
 """Tests for the Pydantic recipe models, including the typing fixes."""
 
+import pytest
 from conftest import BASE_RECIPE
+from pydantic import ValidationError
 
 from models.recipe import (
     OrganizerRef,
     Recipe,
     RecipeIngredientInput,
     RecipeInstructionInput,
+    RecipeNote,
 )
 
 
@@ -84,3 +87,13 @@ def test_recipe_instruction_input_serialisation():
 def test_organizer_ref_requires_id_and_name():
     org = OrganizerRef(id="t1", name="Quick")
     assert org.model_dump(exclude_none=True) == {"id": "t1", "name": "Quick"}
+
+
+def test_recipe_note_requires_text():
+    with pytest.raises(ValidationError):
+        RecipeNote(title="Storage")
+
+
+def test_recipe_note_title_defaults_to_empty_string():
+    assert RecipeNote(text="Swap butter for oil.").title == ""
+

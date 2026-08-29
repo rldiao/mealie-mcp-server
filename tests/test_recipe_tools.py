@@ -107,6 +107,39 @@ async def test_patch_recipe_maps_all_fields(invoke, fetcher):
     }
 
 
+async def test_create_recipe_full_sets_notes(invoke, fetcher):
+    await invoke(
+        "create_recipe_full",
+        name="Noted",
+        notes=[
+            {"title": "Storage", "text": "Keeps 3 days refrigerated."},
+            {"text": "Swap butter for oil."},
+        ],
+    )
+    body = fetcher.last("PUT", "/api/recipes/")["json"]
+    # Mealie requires a title on every note; it defaults to empty, never absent
+    assert body["notes"] == [
+        {"title": "Storage", "text": "Keeps 3 days refrigerated."},
+        {"title": "", "text": "Swap butter for oil."},
+    ]
+
+
+async def test_patch_recipe_replaces_notes(invoke, fetcher):
+    await invoke(
+        "patch_recipe",
+        slug="test-recipe",
+        notes=[{"title": "Tip", "text": "Toast the spices."}],
+    )
+    body = fetcher.last("PATCH", "/api/recipes/")["json"]
+    assert body == {"notes": [{"title": "Tip", "text": "Toast the spices."}]}
+
+
+async def test_patch_recipe_clears_notes_with_empty_list(invoke, fetcher):
+    await invoke("patch_recipe", slug="test-recipe", notes=[])
+    body = fetcher.last("PATCH", "/api/recipes/")["json"]
+    assert body == {"notes": []}
+
+
 async def test_get_recipe_concise_includes_orgurl_tags_tools(invoke, fetcher):
     fetcher.recipe = {
         **fetcher.recipe,
