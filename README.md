@@ -77,13 +77,9 @@ Restart Claude Desktop to load the server.
 
 ## 🌐 Remote Access (HTTP Transport)
 
-[#-remote-access-http-transport](#-remote-access-http-transport)
-
 By default, the server runs over stdio, which works for local clients like Claude Desktop. To make it reachable remotely (e.g. from claude.ai custom connectors, or multiple devices), run it with the streamable-http transport instead.
 
 ### Configuration
-
-[#configuration](#configuration)
 
 Set these environment variables:
 
@@ -94,8 +90,6 @@ Set these environment variables:
 | `MCP_PORT`      | `8765`      | Port to listen on                                     |
 
 ### Example
-
-[#example](#example)
 
 ```bash
 export MCP_TRANSPORT=streamable-http
@@ -110,21 +104,15 @@ The server will expose its MCP endpoint at `http://<host>:<port>/mcp`.
 
 ## 🐳 Docker
 
-[#-docker](#-docker)
-
 A `Dockerfile` is included for running the server as a persistent container — useful for pairing it with a self-hosted Mealie instance (e.g. via Docker Compose) rather than launching it per-session from Claude Desktop.
 
 ### Build
-
-[#build](#build)
 
 ```bash
 docker build -t mealie-mcp-server .
 ```
 
 ### Run standalone
-
-[#run-standalone](#run-standalone)
 
 ```bash
 docker run -d \
@@ -139,8 +127,6 @@ docker run -d \
 ```
 
 ### Run alongside Mealie via Docker Compose
-
-[#run-alongside-mealie-via-docker-compose](#run-alongside-mealie-via-docker-compose)
 
 ```yaml
 services:
