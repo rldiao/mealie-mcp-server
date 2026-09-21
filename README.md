@@ -75,6 +75,39 @@ Run directly from GitHub without cloning:
 
 Restart Claude Desktop to load the server.
 
+## 🌐 Remote Access (HTTP Transport)
+
+[#-remote-access-http-transport](#-remote-access-http-transport)
+
+By default, the server runs over stdio, which works for local clients like Claude Desktop. To make it reachable remotely (e.g. from claude.ai custom connectors, or multiple devices), run it with the streamable-http transport instead.
+
+### Configuration
+
+[#configuration](#configuration)
+
+Set these environment variables:
+
+| Variable        | Default     | Description                                          |
+|-----------------|-------------|-------------------------------------------------------|
+| `MCP_TRANSPORT` | `stdio`     | `stdio` or `streamable-http`                          |
+| `MCP_HOST`      | `127.0.0.1` | Bind address (use `0.0.0.0` in containers)            |
+| `MCP_PORT`      | `8765`      | Port to listen on                                     |
+
+### Example
+
+[#example](#example)
+
+```bash
+export MCP_TRANSPORT=streamable-http
+export MCP_HOST=0.0.0.0
+export MCP_PORT=8765
+python src/server.py
+```
+
+The server will expose its MCP endpoint at `http://<host>:<port>/mcp`.
+
+⚠️ **Security note**: streamable-http mode has no built-in authentication. If exposing this beyond your local network, put it behind a reverse proxy that enforces auth (bearer token, basic auth, or OAuth) before it reaches the internet.
+
 ## 📖 Usage Examples
 
 ### Recipe Operations
