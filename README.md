@@ -108,6 +108,60 @@ The server will expose its MCP endpoint at `http://<host>:<port>/mcp`.
 
 ⚠️ **Security note**: streamable-http mode has no built-in authentication. If exposing this beyond your local network, put it behind a reverse proxy that enforces auth (bearer token, basic auth, or OAuth) before it reaches the internet.
 
+## 🐳 Docker
+
+[#-docker](#-docker)
+
+A `Dockerfile` is included for running the server as a persistent container — useful for pairing it with a self-hosted Mealie instance (e.g. via Docker Compose) rather than launching it per-session from Claude Desktop.
+
+### Build
+
+[#build](#build)
+
+```bash
+docker build -t mealie-mcp-server .
+```
+
+### Run standalone
+
+[#run-standalone](#run-standalone)
+
+```bash
+docker run -d \
+  --name mealie-mcp \
+  -e MEALIE_BASE_URL=http://your-mealie-host:9000 \
+  -e MEALIE_API_KEY=your-mealie-api-key \
+  -e MCP_TRANSPORT=streamable-http \
+  -e MCP_HOST=0.0.0.0 \
+  -e MCP_PORT=8765 \
+  -p 8765:8765 \
+  mealie-mcp-server
+```
+
+### Run alongside Mealie via Docker Compose
+
+[#run-alongside-mealie-via-docker-compose](#run-alongside-mealie-via-docker-compose)
+
+```yaml
+services:
+  mealie-mcp:
+    build: .
+    container_name: mealie-mcp
+    restart: unless-stopped
+    environment:
+      MEALIE_BASE_URL: http://mealie:9000   # internal service name, no need to expose Mealie publicly
+      MEALIE_API_KEY: ${MEALIE_API_KEY}
+      MCP_TRANSPORT: streamable-http
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "8765"
+    expose:
+      - "8765"
+    networks:
+      - mealie_net
+```
+
+⚠️ As noted above, `streamable-http` has no built-in authentication — put a reverse proxy (with bearer token, basic auth, or OAuth) in front of it if it needs to be reachable outside your local network.
+
 ## 📖 Usage Examples
 
 ### Recipe Operations
