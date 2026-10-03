@@ -548,4 +548,4 @@ Step 3: "Filter recipes by tag slug 'quick-meals'"
 
 - [README.md](README.md) - Installation and setup
 - [CHANGELOG.md](CHANGELOG.md) - Version history
-- [API_COVERAGE.md](API_COVERAGE.md) - Detailed API coverage
+- [Available Tools](README.md#-available-tools) - Supported operations

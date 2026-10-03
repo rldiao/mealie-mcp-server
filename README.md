@@ -47,12 +47,17 @@ A comprehensive Model Context Protocol (MCP) server that enables AI assistants t
 
 ### Installation
 
-#### Option 1: Using fastmcp (Recommended)
+#### Option 1: Using the MCP SDK CLI (Recommended)
 
-Install the server directly with the `fastmcp` command:
+Clone the repository, then install the server into Claude Desktop with the
+`mcp` command supplied by the Python MCP SDK (no standalone `fastmcp` package
+is needed):
 
 ```bash
-fastmcp install src/server.py \
+git clone https://github.com/rldiao/mealie-mcp-server.git
+cd mealie-mcp-server
+uv sync --locked
+uv run mcp install src/server.py --with-editable . \
   --env-var MEALIE_BASE_URL=https://your-mealie-instance.com \
   --env-var MEALIE_API_KEY=your-mealie-api-key
 ```
@@ -66,7 +71,11 @@ Run directly from GitHub without cloning:
   "mcpServers": {
     "mealie-mcp-server": {
       "command": "uvx",
-      "args": ["git+https://github.com/rldiao/mealie-mcp-server"],
+      "args": [
+        "--from",
+        "git+https://github.com/rldiao/mealie-mcp-server",
+        "mealie-mcp-server"
+      ],
       "env": {
         "MEALIE_BASE_URL": "https://your-mealie-instance.com",
         "MEALIE_API_KEY": "your-mealie-api-key"
@@ -192,13 +201,14 @@ services:
 
 ## 🎯 Available Tools
 
-### Recipe Tools (13 operations)
+### Recipe Tools (17 operations)
 
 - `get_recipes` - List/search recipes with advanced filtering
 - `get_recipe_detailed` - Get complete recipe details
 - `get_recipe_concise` - Get recipe summary
 - `create_recipe` - Create new recipe (flat or structured ingredients)
 - `create_recipe_full` - Create a recipe with full content (including nutrition and display settings) in one call
+- `import_recipe_from_url` - Import a recipe from a web page
 - `update_recipe` - Update recipe (full replacement)
 - `patch_recipe` - Update specific fields only (including nutrition and display settings)
 - `duplicate_recipe` - Clone a recipe
@@ -206,13 +216,17 @@ services:
 - `set_recipe_image_from_url` - Set image from URL
 - `upload_recipe_image_file` - Upload image file
 - `upload_recipe_asset_file` - Upload document/asset
+- `set_recipe_categories` - Replace or clear recipe categories
+- `set_recipe_tags` - Replace or clear recipe tags
+- `update_recipe_categories_and_tags` - Update both organizers together
 - `delete_recipe` - Delete recipe
 
-### Shopping List Tools (14 operations)
+### Shopping List Tools (15 operations)
 
 - `get_shopping_lists` - List all shopping lists
 - `create_shopping_list` - Create new list
 - `get_shopping_list` - Get list by ID
+- `update_shopping_list` - Rename a list while preserving other fields
 - `delete_shopping_list` - Delete list
 - `add_recipe_to_shopping_list` - Add recipe ingredients
 - `remove_recipe_from_shopping_list` - Remove recipe ingredients
@@ -272,14 +286,16 @@ services:
 - `parse_ingredient` - Resolve one free-text ingredient line
 - `parse_ingredients` - Resolve a whole recipe's ingredients in one request
 
-### Meal Plan Tools (4 operations)
+### Meal Plan Tools (6 operations)
 
 - `get_all_mealplans` - List meal plans
 - `create_mealplan` - Create meal plan entry
 - `create_mealplan_bulk` - Create multiple entries
+- `update_mealplan` - Update an entry while preserving omitted fields
+- `delete_mealplan` - Delete an entry
 - `get_todays_mealplan` - Get today's meals
 
-**Total: 62 tools** providing comprehensive Mealie API coverage
+**Total: 70 tools** providing comprehensive Mealie API coverage
 
 ## 🔧 Development
 
@@ -288,14 +304,14 @@ services:
 1. Clone the repository:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/rldiao/mealie-mcp-server.git
 cd mealie-mcp-server
 ```
 
 2. Install dependencies:
 
 ```bash
-uv sync
+uv sync --locked --extra dev
 ```
 
 3. Configure environment:
@@ -309,6 +325,13 @@ cp .env.template .env
 
 ```bash
 uv run mcp dev src/server.py
+```
+
+5. Run the offline checks:
+
+```bash
+uv run ruff check src tests
+uv run pytest -q
 ```
 
 ### Project Structure
@@ -408,16 +431,42 @@ toggles omitted from a settings PATCH.
 
 ### Field Preservation
 
-When updating shopping list items, the server automatically preserves all existing fields. You only need to specify the fields you want to change:
+When updating shopping list items, both single and bulk updates fetch the current
+records and preserve omitted fields. You only need to specify the fields you
+want to change:
 
 ```
 # Only updates 'checked' field, preserves note, quantity, etc.
 update_shopping_list_item(item_id="...", checked=True)
 ```
 
+Bulk shopping inputs accept snake_case names such as `shopping_list_id` and
+Mealie's camelCase names such as `shoppingListId`. Conflicting aliases and
+duplicate IDs in a bulk update are rejected before writing.
+
+### Meal Plan Validation and Clearing
+
+Meal dates must use `YYYY-MM-DD`, and entry types must be `breakfast`, `lunch`,
+`dinner`, or `side`. Creation requires a recipe or a nonblank title. Bulk meal
+plans are validated in full before any entries are created.
+
+Omitted update fields remain unchanged. To remove an existing recipe link,
+use `update_mealplan(entry_id="...", clear_recipe=True, title="Leftovers")`.
+Do not combine `clear_recipe` with a replacement `recipe_id`.
+
+### Recovering from Partially Completed Writes
+
+Recipe creation/population and bulk meal-plan creation require multiple API
+requests and are not atomic. If a later request fails, the tool error includes
+recovery information identifying completed work. Inspect that information and
+the current Mealie state rather than blindly retrying the entire operation.
+A failed or timed-out request may have completed remotely.
+
 ## 🐛 Known Issues
 
-None currently! All features have been tested end-to-end with Claude Desktop.
+The automated suite exercises MCP tools with fake HTTP responses and includes
+local HTTP-transport checks. It does not replace compatibility testing against
+your deployed Mealie version.
 
 ## 🔄 Changelog
 
@@ -434,7 +483,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Credits
 
 - [Mealie](https://github.com/mealie-recipes/mealie) - The recipe management system
-- [FastMCP](https://github.com/jlowin/fastmcp) - The MCP framework
+- [Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk) - The SDK and bundled FastMCP server
 
 ## 📞 Support
 
