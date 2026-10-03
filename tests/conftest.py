@@ -14,6 +14,7 @@ from mcp.server.fastmcp import FastMCP
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from mealie import MealieFetcher  # noqa: E402
+from mealie.client import MealieApiError  # noqa: E402
 from tools import register_all_tools  # noqa: E402
 
 # A minimal but schema-valid recipe payload (satisfies the required Recipe
@@ -32,6 +33,47 @@ BASE_RECIPE = {
 }
 
 
+def _parsed(text):
+    """A ParsedIngredient shaped like Mealie's, with the full food/unit records.
+
+    Unit is left unmatched so the flattening keeps a null visible.
+    """
+    return {
+        "input": text,
+        "confidence": {
+            "average": 0.996,
+            "comment": 0.993,
+            "name": None,
+            "unit": 0.999,
+            "quantity": 1.0,
+            "food": 0.991,
+        },
+        "ingredient": {
+            "quantity": 0.25,
+            "unit": None,
+            "food": {
+                "id": "a0819c33-1a5e-4374-9151-ed85160c0049",
+                "name": "onion",
+                "pluralName": "onions",
+                "description": "",
+                "extras": {},
+                "labelId": None,
+                "aliases": [],
+                "householdsWithIngredientFood": [],
+                "label": None,
+                "createdAt": "2026-08-03T02:15:22.603088Z",
+                "updatedAt": "2026-08-03T02:15:22.603092Z",
+            },
+            "referencedRecipe": None,
+            "note": "chopped",
+            "display": "¹/₄ cup onion chopped",
+            "title": None,
+            "originalText": None,
+            "referenceId": "75e1853f-3cb1-49b9-b2ca-26ae76da256b",
+        },
+    }
+
+
 class FakeFetcher(MealieFetcher):
     """MealieFetcher with the network layer replaced by a recorder.
 
@@ -43,6 +85,12 @@ class FakeFetcher(MealieFetcher):
         self.requests = []
         self.created_slug = "test-recipe"
         self.recipe = dict(BASE_RECIPE)
+        # url fragment -> MealieApiError to raise, for client-failure tests
+        self.failures = {}
+
+    def fail_on(self, url_contains, status_code=422, message="Mealie rejected it"):
+        """Make any request whose url contains this fragment raise."""
+        self.failures[url_contains] = MealieApiError(status_code, message)
 
     def _handle_request(self, method, url, **kwargs):
         self.requests.append(
@@ -55,6 +103,9 @@ class FakeFetcher(MealieFetcher):
                 "data": kwargs.get("data"),
             }
         )
+        for fragment, error in self.failures.items():
+            if fragment in url:
+                raise error
         if method == "POST" and url == "/api/recipes":
             name = (kwargs.get("json") or {}).get("name")
             if name:
@@ -72,6 +123,12 @@ class FakeFetcher(MealieFetcher):
                 "icon": data.get("icon"),
                 "fileName": f"{data.get('name')}.{data.get('extension')}",
             }
+        if method == "POST" and url == "/api/parser/ingredient":
+            return _parsed((kwargs.get("json") or {}).get("ingredient"))
+        if method == "POST" and url == "/api/parser/ingredients":
+            return [
+                _parsed(text) for text in (kwargs.get("json") or {}).get("ingredients", [])
+            ]
         if method in ("PUT", "PATCH") and url.startswith("/api/recipes/"):
             return kwargs.get("json", {})
         # single-record GET (the fetch-merge update path reads the existing record)

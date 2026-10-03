@@ -14,6 +14,7 @@ A comprehensive Model Context Protocol (MCP) server that enables AI assistants t
 - **Asset Uploads**: Attach documents and files to recipes
 - **Metadata Tracking**: Mark recipes as made, track last made dates
 - **Nutrition**: Set per-serving nutrition when creating or patching a recipe
+- **Ingredient Parsing**: Resolve free-text ingredients against your food and unit vocabulary
 
 ### 🛒 Shopping Lists
 
@@ -192,6 +193,11 @@ Restart Claude Desktop to load the server.
 - `update_tool` - Update tool
 - `delete_tool` - Delete tool
 
+### Parser Tools (2 operations)
+
+- `parse_ingredient` - Resolve one free-text ingredient line
+- `parse_ingredients` - Resolve a whole recipe's ingredients in one request
+
 ### Meal Plan Tools (4 operations)
 
 - `get_all_mealplans` - List meal plans
@@ -243,6 +249,7 @@ mealie-mcp-server/
 │   │   ├── categories.py    # Category operations
 │   │   ├── tags.py          # Tag operations
 │   │   ├── mealplan.py      # Meal plan operations
+│   │   ├── parser.py        # Ingredient parser
 │   │   └── __init__.py      # MealieFetcher aggregator
 │   ├── tools/               # MCP tool definitions
 │   │   ├── recipe_tools.py
@@ -250,6 +257,7 @@ mealie-mcp-server/
 │   │   ├── categories_tools.py
 │   │   ├── tags_tools.py
 │   │   ├── mealplan_tools.py
+│   │   ├── parser_tools.py
 │   │   └── __init__.py
 │   ├── models/              # Pydantic models
 │   ├── server.py            # MCP server entry point
@@ -287,6 +295,23 @@ suit, so pass every value you want to keep:
 # clears every nutrition value except fat
 patch_recipe(slug="...", nutrition={"fatContent": "12"})
 ```
+
+### Parsing Ingredients in Bulk
+
+Resolving ingredients by hand costs one to two `get_foods` / `get_units` calls
+each. `parse_ingredients` does a whole recipe in one request and returns results
+that can be handed straight to `create_recipe_full`:
+
+```
+parse_ingredients(ingredients=["1/4 cup chopped onion", "2 large eggs"])
+# -> [{"input": "1/4 cup chopped onion", "confidence": 0.99, "quantity": 0.25,
+#      "unit": {"id": "...", "name": "cup"},
+#      "food": {"id": "...", "name": "onion"}, "note": "chopped"}, ...]
+```
+
+A `null` unit or food means your instance has no matching entry — create one
+with `create_food` / `create_unit`, or leave the text in the note. Pass
+`verbose=True` for Mealie's full response including per-field confidences.
 
 ### Field Preservation
 

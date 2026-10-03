@@ -3,6 +3,7 @@ from .client import MealieClient
 from .foods import FoodsMixin
 from .group import GroupMixin
 from .mealplan import MealplanMixin
+from .parser import ParserMixin
 from .recipe import RecipeMixin
 from .shopping_list import ShoppingListMixin
 from .tags import TagsMixin
@@ -18,6 +19,7 @@ class MealieFetcher(
     FoodsMixin,
     UnitsMixin,
     ToolsMixin,
+    ParserMixin,
     ShoppingListMixin,
     MealplanMixin,
     UserMixin,
