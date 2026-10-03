@@ -187,7 +187,19 @@ class RecipeInstructionInput(BaseModel):
 
     text: str = Field(description="The instruction text for this step.")
     title: Optional[str] = Field(
-        default=None, description="Optional heading for this step or section."
+        default=None,
+        description=(
+            "Section heading rendered as a separate banner above this step. "
+            "It does not replace the 'Step N' label, which stays below it. "
+            "Use summary for a plain per-step heading."
+        ),
+    )
+    summary: Optional[str] = Field(
+        default=None,
+        description=(
+            "Short heading shown in place of the 'Step N' label on this step. "
+            "Mealie only renders the step number when this is empty."
+        ),
     )
     ingredientReferences: Optional[List[IngredientReference]] = Field(
         default=None,

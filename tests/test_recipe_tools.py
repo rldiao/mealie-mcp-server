@@ -48,6 +48,25 @@ async def test_create_recipe_accepts_flat_and_structured(invoke, fetcher):
     ]
 
 
+async def test_create_recipe_forwards_instruction_summary(invoke, fetcher):
+    await invoke(
+        "create_recipe",
+        name="Summaries",
+        ingredients=["200 g basmati rice"],
+        instructions=[
+            {"text": "Rinse the rice.", "summary": "Prep"},
+            {"text": "Boil it.", "summary": "Cook", "title": "On the stove"},
+        ],
+    )
+    steps = fetcher.last("PUT", "/api/recipes/")["json"]["recipeInstructions"]
+
+    assert steps[0]["summary"] == "Prep"
+    # summary travels on its own: an omitted title is left out of the payload
+    assert "title" not in steps[0]
+    assert steps[1]["summary"] == "Cook"
+    assert steps[1]["title"] == "On the stove"
+
+
 async def test_create_recipe_full_sets_metadata_tags_tools_and_image(invoke, fetcher):
     await invoke(
         "create_recipe_full",

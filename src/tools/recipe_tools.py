@@ -248,7 +248,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         - An ingredient object can set quantity, note, title, an existing
           Mealie unit/food (by id and name), and a referenceId for step links.
         - An instruction string is the step text; an instruction object can
-          also carry a title and ingredientReferences for cook-mode highlights.
+          also carry a summary (heading shown in place of "Step N"), a title
+          (section banner above the step), and ingredientReferences for
+          cook-mode highlights.
 
         Args:
             name: The name of the new recipe to be created.

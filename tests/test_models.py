@@ -81,6 +81,14 @@ def test_recipe_instruction_input_serialisation():
     assert step.ingredientReferences[0].referenceId == "r1"
 
 
+def test_recipe_instruction_input_carries_summary():
+    step = RecipeInstructionInput(text="Do it", summary="Prep")
+    dumped = step.model_dump(exclude_none=True)
+    assert dumped["summary"] == "Prep"
+    # title stays independent of summary: the two render differently in Mealie
+    assert "title" not in dumped
+
+
 def test_organizer_ref_requires_id_and_name():
     org = OrganizerRef(id="t1", name="Quick")
     assert org.model_dump(exclude_none=True) == {"id": "t1", "name": "Quick"}
