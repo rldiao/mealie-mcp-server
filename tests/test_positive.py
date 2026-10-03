@@ -11,7 +11,7 @@ async def test_lookups_return_items(invoke, tool):
     assert "items" in out and isinstance(out["items"], list)
 
 
-async def test_food_crud_roundtrip(invoke):
+async def test_food_crud_operations(invoke):
     created = await invoke("create_food", name="Reis", plural_name="Reissorten")
     assert created["id"]
     got = await invoke("get_food", food_id="f1")

@@ -6,6 +6,7 @@
 - Prefer the shared `FakeFetcher` fixture in `tests/conftest.py`. It runs real mixin request construction while recording method, URL, JSON, and query parameters.
 - Use the `invoke` fixture to exercise registered MCP tools through FastMCP rather than calling nested wrapper functions directly.
 - Extend `FakeFetcher` with the smallest endpoint behavior needed for a new test; keep canned responses schema-valid.
+- Unknown fake routes must fail. Use `fetcher.responses[method, path]` for isolated response overrides, including malformed-response tests; never restore a catch-all success response.
 
 ## Required coverage for changes
 
@@ -22,4 +23,3 @@
 - Run a focused file: `uv run pytest -q tests/test_recipe_tools.py`
 - Lint tests and source: `uv run ruff check src tests`
 - Keep tests deterministic and independent of execution order.
-
