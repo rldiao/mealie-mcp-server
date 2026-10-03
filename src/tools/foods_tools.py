@@ -52,6 +52,8 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         name: str,
         plural_name: Optional[str] = None,
         description: Optional[str] = None,
+        extras: Optional[Dict[str, Any]] = None,
+        label_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create a new food.
 
@@ -59,6 +61,10 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             name: Name of the food (e.g. "Reis").
             plural_name: Optional plural name.
             description: Optional description.
+            extras: Optional arbitrary key-value metadata dict stored on the food
+                (Mealie's ``extras`` field) — e.g. external identifiers.
+            label_id: Optional UUID of a Multi Purpose Label to assign (used for
+                aisle/section grouping on shopping lists).
 
         Returns:
             Dict[str, Any]: The created food.
@@ -66,7 +72,11 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         try:
             logger.info({"message": "Creating food", "name": name})
             return mealie.create_food(
-                name, plural_name=plural_name, description=description
+                name,
+                plural_name=plural_name,
+                description=description,
+                extras=extras,
+                label_id=label_id,
             )
         except Exception as e:
             error_msg = f"Error creating food '{name}': {str(e)}"
@@ -103,6 +113,8 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         name: Optional[str] = None,
         plural_name: Optional[str] = None,
         description: Optional[str] = None,
+        extras: Optional[Dict[str, Any]] = None,
+        label_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Update a food's details (only provided fields are changed).
 
@@ -111,6 +123,10 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             name: New name for the food.
             plural_name: New plural name.
             description: New description.
+            extras: Arbitrary key-value metadata dict to store on the food
+                (Mealie's ``extras`` field). Replaces the food's existing extras.
+            label_id: UUID of a Multi Purpose Label to assign (aisle/section
+                grouping). Pass an empty string to clear the label.
 
         Returns:
             Dict[str, Any]: The updated food.
@@ -125,6 +141,12 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 food_data["pluralName"] = plural_name
             if description is not None:
                 food_data["description"] = description
+            if extras is not None:
+                food_data["extras"] = extras
+            if label_id is not None:
+                # "" is the caller's "clear the label" sentinel; Mealie's API
+                # rejects an empty string for a UUID field and wants null instead.
+                food_data["labelId"] = label_id or None
 
             if not food_data:
                 raise ValueError("At least one field must be provided to update")

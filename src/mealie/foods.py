@@ -43,6 +43,8 @@ class FoodsMixin:
         name: str,
         plural_name: Optional[str] = None,
         description: Optional[str] = None,
+        extras: Optional[Dict[str, Any]] = None,
+        label_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create a new food.
 
@@ -50,6 +52,8 @@ class FoodsMixin:
             name: Name of the food
             plural_name: Optional plural name
             description: Optional description
+            extras: Optional arbitrary key-value metadata dict (Mealie ``extras``)
+            label_id: Optional Multi Purpose Label UUID (aisle/section grouping)
 
         Returns:
             JSON response containing the created food
@@ -62,6 +66,11 @@ class FoodsMixin:
             payload["pluralName"] = plural_name
         if description is not None:
             payload["description"] = description
+        if extras is not None:
+            payload["extras"] = extras
+        if label_id is not None:
+            # "" clears the label; Mealie wants null, not an empty UUID string.
+            payload["labelId"] = label_id or None
 
         logger.info({"message": "Creating food", "name": name})
         return self._handle_request("POST", "/api/foods", json=payload)
