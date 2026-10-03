@@ -117,6 +117,8 @@ class FakeFetcher(MealieFetcher):
         if (method, url) in self.responses:
             return deepcopy(self.responses[method, url])
         resource_url, _, resource_id = url.rpartition("/")
+        if method == "POST" and url == "/api/recipes/create/ai":
+            return self.created_slug
         if method == "POST" and url == "/api/recipes":
             name = (kwargs.get("json") or {}).get("name")
             if name:
