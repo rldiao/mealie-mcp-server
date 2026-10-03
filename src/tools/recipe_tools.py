@@ -1,7 +1,9 @@
-import logging
+import json
+import math
 import re
-import traceback
 import uuid
+from contextlib import contextmanager
+from copy import deepcopy
 from typing import Any, Dict, List, Optional, Union
 
 from mcp.server.fastmcp import FastMCP
@@ -17,11 +19,8 @@ from models.recipe import (
     RecipeInstructionInput,
     RecipeNutrition,
     RecipeSettingsInput,
-    RecipeTag,
-    RecipeTool,
 )
-
-logger = logging.getLogger("mealie-mcp")
+from tools.errors import tool_error_boundary
 
 
 def _build_ingredient(
@@ -95,15 +94,131 @@ def _coerce_reference_id(value: Optional[str]) -> Optional[str]:
     return str(uuid.UUID(int=uuid.uuid5(_REF_NAMESPACE, str(value)).int, version=4))
 
 
-def _normalize_references(recipe: Recipe) -> None:
+def _normalize_references(
+    ingredients: List[RecipeIngredient], instructions: List[RecipeInstruction]
+) -> None:
     """Coerce every ingredient referenceId and instruction link to a UUID."""
-    for ingredient in recipe.recipeIngredient:
+    for ingredient in ingredients:
         if ingredient.referenceId:
             ingredient.referenceId = _coerce_reference_id(ingredient.referenceId)
-    for step in recipe.recipeInstructions:
+    for step in instructions:
         for ref in step.ingredientReferences:
             if ref.referenceId:
                 ref.referenceId = _coerce_reference_id(ref.referenceId)
+
+
+def _require_text(value: str, label: str) -> None:
+    if not value.strip():
+        raise ValueError(f"{label} cannot be empty")
+
+
+def _recipe_changes(
+    *,
+    ingredients: Optional[List[Union[str, RecipeIngredientInput]]] = None,
+    instructions: Optional[List[Union[str, RecipeInstructionInput]]] = None,
+    tags: Optional[List[OrganizerRef]] = None,
+    tools: Optional[List[OrganizerRef]] = None,
+    nutrition: Optional[RecipeNutrition] = None,
+    settings: Optional[RecipeSettingsInput] = None,
+    **fields: Any,
+) -> Dict[str, Any]:
+    """Validate and serialize caller content before any creation request."""
+    field_names = {
+        "name": "name",
+        "description": "description",
+        "org_url": "orgURL",
+        "total_time": "totalTime",
+        "prep_time": "prepTime",
+        "cook_time": "cookTime",
+        "perform_time": "performTime",
+        "recipe_yield": "recipeYield",
+        "servings": "recipeServings",
+    }
+    changes = {
+        field_names[key]: value for key, value in fields.items() if value is not None
+    }
+    if "name" in changes:
+        _require_text(changes["name"], "Recipe name")
+    if "recipeServings" in changes and not math.isfinite(changes["recipeServings"]):
+        raise ValueError("Servings must be finite")
+    built_ingredients = [_build_ingredient(i) for i in ingredients or []]
+    built_instructions = [_build_instruction(i) for i in instructions or []]
+    _normalize_references(built_ingredients, built_instructions)
+    if ingredients is not None:
+        changes["recipeIngredient"] = [
+            i.model_dump(exclude_none=True) for i in built_ingredients
+        ]
+    if instructions is not None:
+        changes["recipeInstructions"] = [
+            i.model_dump(exclude_none=True) for i in built_instructions
+        ]
+    if tags is not None:
+        changes["tags"] = [_organizer_payload(t) for t in tags]
+    if tools is not None:
+        changes["tools"] = [_organizer_payload(t) for t in tools]
+    if nutrition is not None:
+        changes["nutrition"] = nutrition.model_dump(exclude_none=True)
+    if settings is not None:
+        changes["settings"] = settings.model_dump(exclude_none=True)
+    return changes
+
+
+def _compose_recipe(
+    current: Dict[str, Any], changes: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Preserve fetched fields, replacing content but merging settings toggles."""
+    recipe = deepcopy(current)
+    recipe.setdefault("nutrition", {})
+    recipe.update(deepcopy(changes))
+    if "settings" in changes:
+        recipe["settings"] = {
+            **deepcopy(current.get("settings") or {}),
+            **changes["settings"],
+        }
+    return recipe
+
+
+@contextmanager
+def _created_recipe_stage(slug: str, stage: str):
+    """Expose recovery information only to the caller, never to logs."""
+    try:
+        with tool_error_boundary("Error completing created recipe"):
+            yield
+    except ToolError:
+        raise ToolError(
+            json.dumps(
+                {
+                    "message": (
+                        "Recipe was created; inspect it and resume using its slug "
+                        "instead of creating it again."
+                    ),
+                    "created_slug": slug,
+                    "stage": stage,
+                }
+            )
+        ) from None
+
+
+def _create_populated_recipe(
+    mealie: MealieFetcher,
+    name: str,
+    changes: Dict[str, Any],
+    image_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    _require_text(name, "Recipe name")
+    if image_url is not None:
+        _require_text(image_url, "Image URL")
+    slug = mealie.create_recipe(name)
+    with _created_recipe_stage(slug, "fetch"):
+        current = mealie.get_recipe(slug)
+    with _created_recipe_stage(slug, "populate"):
+        updated = mealie.update_recipe(slug, _compose_recipe(current, changes))
+    if image_url is not None:
+        with _created_recipe_stage(slug, "image"):
+            mealie.scrape_recipe_image_from_url(slug, image_url)
+        with _created_recipe_stage(slug, "fetch_image"):
+            updated = mealie.get_recipe(slug)
+    return updated
 
 
 def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
@@ -139,19 +254,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Recipe summaries with details like ID, name, description, and image information.
         """
-        try:
-            logger.info(
-                {
-                    "message": "Fetching recipes",
-                    "search": search,
-                    "page": page,
-                    "per_page": per_page,
-                    "categories": categories,
-                    "tags": tags,
-                    "require_all_tags": require_all_tags,
-                    "require_all_categories": require_all_categories,
-                }
-            )
+        with tool_error_boundary("Error fetching recipes"):
             return mealie.get_recipes(
                 search=search,
                 page=page,
@@ -161,13 +264,6 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 require_all_tags=require_all_tags,
                 require_all_categories=require_all_categories,
             )
-        except Exception as e:
-            error_msg = f"Error fetching recipes: {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def get_recipe_detailed(slug: str) -> Dict[str, Any]:
@@ -182,16 +278,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             Dict[str, Any]: Comprehensive recipe details including ingredients, instructions,
                 nutrition information, notes, and associated metadata.
         """
-        try:
-            logger.info({"message": "Fetching recipe", "slug": slug})
+        with tool_error_boundary("Error fetching recipe"):
             return mealie.get_recipe(slug)
-        except Exception as e:
-            error_msg = f"Error fetching recipe with slug '{slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def get_recipe_concise(slug: str) -> Dict[str, Any]:
@@ -205,8 +293,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Concise recipe summary with essential fields.
         """
-        try:
-            logger.info({"message": "Fetching recipe", "slug": slug})
+        with tool_error_boundary("Error fetching recipe"):
             recipe_json = mealie.get_recipe(slug)
             recipe = Recipe.model_validate(recipe_json)
             return recipe.model_dump(
@@ -226,13 +313,6 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 },
                 exclude_none=True,
             )
-        except Exception as e:
-            error_msg = f"Error fetching recipe with slug '{slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def create_recipe(
@@ -261,23 +341,15 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
         Returns:
             Dict[str, Any]: The created recipe details.
+
+        If a later API step fails, the error includes created_slug and stage.
+        Inspect that recipe and resume the failed step instead of creating again.
         """
-        try:
-            logger.info({"message": "Creating recipe", "name": name})
-            slug = mealie.create_recipe(name)
-            recipe_json = mealie.get_recipe(slug)
-            recipe = Recipe.model_validate(recipe_json)
-            recipe.recipeIngredient = [_build_ingredient(i) for i in ingredients]
-            recipe.recipeInstructions = [_build_instruction(i) for i in instructions]
-            _normalize_references(recipe)
-            return mealie.update_recipe(slug, recipe.model_dump(exclude_none=True))
-        except Exception as e:
-            error_msg = f"Error creating recipe '{name}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
+        with tool_error_boundary("Error creating recipe"):
+            changes = _recipe_changes(
+                ingredients=ingredients, instructions=instructions
             )
-            raise ToolError(error_msg)
+            return _create_populated_recipe(mealie, name, changes)
 
     @mcp.tool()
     def import_recipe_from_url(
@@ -305,18 +377,14 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The created recipe, including slug, name,
             ingredients, and instructions.
+
+        If fetching the imported recipe fails, the error includes created_slug
+        and stage so the recipe can be retrieved without importing it again.
         """
-        try:
-            logger.info({"message": "Importing recipe from URL", "url": url})
+        with tool_error_boundary("Error importing recipe from URL"):
             slug = mealie.import_recipe_from_url(url, include_tags=include_tags)
-            return mealie.get_recipe(slug)
-        except Exception as e:
-            error_msg = f"Error importing recipe from URL '{url}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
+            with _created_recipe_stage(slug, "fetch"):
+                return mealie.get_recipe(slug)
 
     @mcp.tool()
     def update_recipe(
@@ -337,21 +405,12 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The updated recipe details.
         """
-        try:
-            logger.info({"message": "Updating recipe", "slug": slug})
-            recipe_json = mealie.get_recipe(slug)
-            recipe = Recipe.model_validate(recipe_json)
-            recipe.recipeIngredient = [_build_ingredient(i) for i in ingredients]
-            recipe.recipeInstructions = [_build_instruction(i) for i in instructions]
-            _normalize_references(recipe)
-            return mealie.update_recipe(slug, recipe.model_dump(exclude_none=True))
-        except Exception as e:
-            error_msg = f"Error updating recipe '{slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
+        with tool_error_boundary("Error updating recipe"):
+            changes = _recipe_changes(
+                ingredients=ingredients, instructions=instructions
             )
-            raise ToolError(error_msg)
+            current = mealie.get_recipe(slug)
+            return mealie.update_recipe(slug, _compose_recipe(current, changes))
 
     @mcp.tool()
     def create_recipe_full(
@@ -363,7 +422,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         cook_time: Optional[str] = None,
         perform_time: Optional[str] = None,
         recipe_yield: Optional[str] = None,
-        servings: Optional[int] = None,
+        servings: Optional[float] = None,
         image_url: Optional[str] = None,
         ingredients: Optional[List[Union[str, RecipeIngredientInput]]] = None,
         instructions: Optional[List[Union[str, RecipeInstructionInput]]] = None,
@@ -407,62 +466,28 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
         Returns:
             Dict[str, Any]: The created recipe details.
+
+        If a later API step fails, the error includes created_slug and stage.
+        Inspect that recipe and resume the failed step instead of creating again.
         """
-        try:
-            logger.info({"message": "Creating full recipe", "name": name})
-            slug = mealie.create_recipe(name)
-            recipe_json = mealie.get_recipe(slug)
-            recipe = Recipe.model_validate(recipe_json)
-
-            if description is not None:
-                recipe.description = description
-            if org_url is not None:
-                recipe.orgURL = org_url
-            if total_time is not None:
-                recipe.totalTime = total_time
-            if prep_time is not None:
-                recipe.prepTime = prep_time
-            if cook_time is not None:
-                recipe.cookTime = cook_time
-            if perform_time is not None:
-                recipe.performTime = perform_time
-            if recipe_yield is not None:
-                recipe.recipeYield = recipe_yield
-            if servings is not None:
-                recipe.recipeServings = servings
-            if ingredients is not None:
-                recipe.recipeIngredient = [_build_ingredient(i) for i in ingredients]
-            if instructions is not None:
-                recipe.recipeInstructions = [
-                    _build_instruction(i) for i in instructions
-                ]
-            if tags is not None:
-                recipe.tags = [RecipeTag(**_organizer_payload(t)) for t in tags]
-            if tools is not None:
-                recipe.tools = [RecipeTool(**_organizer_payload(t)) for t in tools]
-            if nutrition is not None:
-                recipe.nutrition = nutrition
-            if settings is not None:
-                # merge onto the settings Mealie already seeded, so unpassed
-                # toggles keep their value instead of falling back to defaults
-                for key, value in settings.model_dump(exclude_none=True).items():
-                    setattr(recipe.settings, key, value)
-            _normalize_references(recipe)
-
-            updated = mealie.update_recipe(slug, recipe.model_dump(exclude_none=True))
-
-            if image_url is not None:
-                mealie.scrape_recipe_image_from_url(slug, image_url)
-                updated = mealie.get_recipe(slug)
-
-            return updated
-        except Exception as e:
-            error_msg = f"Error creating full recipe '{name}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
+        with tool_error_boundary("Error creating full recipe"):
+            changes = _recipe_changes(
+                description=description,
+                org_url=org_url,
+                total_time=total_time,
+                prep_time=prep_time,
+                cook_time=cook_time,
+                perform_time=perform_time,
+                recipe_yield=recipe_yield,
+                servings=servings,
+                ingredients=ingredients,
+                instructions=instructions,
+                tags=tags,
+                tools=tools,
+                nutrition=nutrition,
+                settings=settings,
             )
-            raise ToolError(error_msg)
+            return _create_populated_recipe(mealie, name, changes, image_url)
 
     @mcp.tool()
     def patch_recipe(
@@ -470,7 +495,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         name: Optional[str] = None,
         description: Optional[str] = None,
         recipe_yield: Optional[str] = None,
-        servings: Optional[int] = None,
+        servings: Optional[float] = None,
         total_time: Optional[str] = None,
         prep_time: Optional[str] = None,
         cook_time: Optional[str] = None,
@@ -509,34 +534,22 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The updated recipe details.
         """
-        try:
-            logger.info({"message": "Patching recipe", "slug": slug})
-
-            recipe_data = {}
-            if name is not None:
-                recipe_data["name"] = name
-            if description is not None:
-                recipe_data["description"] = description
-            if recipe_yield is not None:
-                recipe_data["recipeYield"] = recipe_yield
-            if servings is not None:
-                recipe_data["recipeServings"] = servings
-            if total_time is not None:
-                recipe_data["totalTime"] = total_time
-            if prep_time is not None:
-                recipe_data["prepTime"] = prep_time
-            if cook_time is not None:
-                recipe_data["cookTime"] = cook_time
-            if perform_time is not None:
-                recipe_data["performTime"] = perform_time
-            if org_url is not None:
-                recipe_data["orgURL"] = org_url
-            if tags is not None:
-                recipe_data["tags"] = [_organizer_payload(t) for t in tags]
-            if tools is not None:
-                recipe_data["tools"] = [_organizer_payload(t) for t in tools]
-            if nutrition is not None:
-                recipe_data["nutrition"] = nutrition.model_dump(exclude_none=True)
+        with tool_error_boundary("Error patching recipe"):
+            recipe_data = _recipe_changes(
+                name=name,
+                description=description,
+                recipe_yield=recipe_yield,
+                servings=servings,
+                total_time=total_time,
+                prep_time=prep_time,
+                cook_time=cook_time,
+                perform_time=perform_time,
+                org_url=org_url,
+                tags=tags,
+                tools=tools,
+                nutrition=nutrition,
+                settings=settings,
+            )
             if settings is not None:
                 # Mealie drops some toggles omitted from a settings PATCH, so
                 # send the complete object built from the recipe's current one
@@ -550,13 +563,6 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 raise ValueError("At least one field must be provided to update")
 
             return mealie.patch_recipe(slug, recipe_data)
-        except Exception as e:
-            error_msg = f"Error patching recipe '{slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def duplicate_recipe(slug: str, name: Optional[str] = None) -> Dict[str, Any]:
@@ -569,16 +575,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The newly created duplicate recipe details.
         """
-        try:
-            logger.info({"message": "Duplicating recipe", "slug": slug, "name": name})
+        with tool_error_boundary("Error duplicating recipe"):
             return mealie.duplicate_recipe(slug, name)
-        except Exception as e:
-            error_msg = f"Error duplicating recipe '{slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def mark_recipe_last_made(slug: str) -> Dict[str, Any]:
@@ -590,16 +588,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The updated recipe details.
         """
-        try:
-            logger.info({"message": "Marking recipe as last made", "slug": slug})
+        with tool_error_boundary("Error updating recipe last made"):
             return mealie.update_recipe_last_made(slug)
-        except Exception as e:
-            error_msg = f"Error updating recipe last made '{slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def set_recipe_image_from_url(slug: str, image_url: str) -> Dict[str, Any]:
@@ -612,22 +602,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Confirmation that the image was set.
         """
-        try:
-            logger.info(
-                {
-                    "message": "Setting recipe image from URL",
-                    "slug": slug,
-                    "url": image_url,
-                }
-            )
+        with tool_error_boundary("Error setting recipe image from URL"):
             return mealie.scrape_recipe_image_from_url(slug, image_url)
-        except Exception as e:
-            error_msg = f"Error setting recipe image from URL '{slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def upload_recipe_image_file(
@@ -643,28 +619,17 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Confirmation that the image was uploaded.
         """
-        try:
+        with tool_error_boundary("Error uploading recipe image"):
             import os
 
-            logger.info(
-                {"message": "Uploading recipe image", "slug": slug, "path": image_path}
-            )
-
             if not os.path.exists(image_path):
-                raise ValueError(f"Image file not found: {image_path}")
+                raise ValueError("Image file not found")
 
             with open(image_path, "rb") as f:
                 image_data = f.read()
 
             filename = os.path.basename(image_path)
             return mealie.upload_recipe_image(slug, image_data, filename, extension)
-        except Exception as e:
-            error_msg = f"Error uploading recipe image '{slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def upload_recipe_asset_file(
@@ -686,15 +651,11 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Details of the uploaded asset.
         """
-        try:
+        with tool_error_boundary("Error uploading recipe asset"):
             import os
 
-            logger.info(
-                {"message": "Uploading recipe asset", "slug": slug, "path": asset_path}
-            )
-
             if not os.path.exists(asset_path):
-                raise ValueError(f"Asset file not found: {asset_path}")
+                raise ValueError("Asset file not found")
 
             with open(asset_path, "rb") as f:
                 asset_data = f.read()
@@ -703,13 +664,6 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             return mealie.upload_recipe_asset(
                 slug, asset_data, filename, name=name, icon=icon, extension=extension
             )
-        except Exception as e:
-            error_msg = f"Error uploading recipe asset '{slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def set_recipe_categories(slug: str, category_ids: List[str]) -> Dict[str, Any]:
@@ -724,14 +678,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The updated recipe details.
         """
-        try:
-            logger.info({"message": "Setting recipe categories", "slug": slug, "category_ids": category_ids})
+        with tool_error_boundary("Error setting recipe categories"):
             return mealie.set_recipe_categories(slug, category_ids)
-        except Exception as e:
-            error_msg = f"Error setting categories on recipe '{slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def set_recipe_tags(slug: str, tag_ids: List[str]) -> Dict[str, Any]:
@@ -746,14 +694,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The updated recipe details.
         """
-        try:
-            logger.info({"message": "Setting recipe tags", "slug": slug, "tag_ids": tag_ids})
+        with tool_error_boundary("Error setting recipe tags"):
             return mealie.set_recipe_tags(slug, tag_ids)
-        except Exception as e:
-            error_msg = f"Error setting tags on recipe '{slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def update_recipe_categories_and_tags(
@@ -773,14 +715,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The updated recipe details.
         """
-        try:
-            logger.info({"message": "Updating recipe categories and tags", "slug": slug})
+        with tool_error_boundary("Error updating recipe categories and tags"):
             return mealie.set_recipe_categories_and_tags(slug, category_ids=category_ids, tag_ids=tag_ids)
-        except Exception as e:
-            error_msg = f"Error updating categories/tags on recipe '{slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def delete_recipe(slug: str) -> Dict[str, Any]:
@@ -792,13 +728,5 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Confirmation of deletion.
         """
-        try:
-            logger.info({"message": "Deleting recipe", "slug": slug})
+        with tool_error_boundary("Error deleting recipe"):
             return mealie.delete_recipe(slug)
-        except Exception as e:
-            error_msg = f"Error deleting recipe '{slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)

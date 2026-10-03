@@ -1,8 +1,16 @@
 """Tests for the recipe-authoring tools (structured ingredients, full create,
 patch fields, concise output, image and asset uploads)."""
 
+import json
+import logging
+import uuid
+from copy import deepcopy
+
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
+
+from mealie.client import MealieApiError
+from tools.recipe_tools import _compose_recipe
 
 
 async def test_create_recipe_accepts_flat_and_structured(invoke, fetcher):
@@ -354,3 +362,319 @@ async def test_nutrition_and_settings_can_be_set_together(
     assert body["settings"]["showNutrition"] is False
     assert body["settings"]["locked"] is True
     assert body["settings"]["showAssets"] is True
+
+
+@pytest.mark.parametrize("tool_name", ["create_recipe", "create_recipe_full", "update_recipe"])
+@pytest.mark.parametrize("field", ["food", "unit"])
+async def test_authoring_validates_nested_ingredients_before_requests(
+    invoke, fetcher, tool_name, field
+):
+    arguments = {
+        "ingredients": [{field: {"id": "a0819c33-1a5e-4374-9151-ed85160c0049"}}],
+        "instructions": [],
+    }
+    arguments.update(
+        {"slug": "test-recipe"} if tool_name == "update_recipe" else {"name": "Recipe"}
+    )
+    with pytest.raises(ToolError):
+        await invoke(tool_name, **arguments)
+    assert fetcher.requests == []
+
+
+async def test_shared_composition_keeps_deterministic_instruction_links(invoke, fetcher):
+    arguments = {
+        "ingredients": [{"note": "Onion", "referenceId": "onion"}],
+        "instructions": [
+            {"text": "Chop", "ingredientReferences": [{"referenceId": "onion"}]}
+        ],
+    }
+    reference_ids = []
+    for tool_name, identifier in (
+        ("create_recipe", {"name": "Recipe"}),
+        ("create_recipe_full", {"name": "Recipe"}),
+        ("update_recipe", {"slug": "test-recipe"}),
+    ):
+        await invoke(tool_name, **identifier, **arguments)
+        written = fetcher.last("PUT")["json"]
+        reference_id = written["recipeIngredient"][0]["referenceId"]
+        assert uuid.UUID(reference_id).version == 4
+        assert written["recipeInstructions"][0]["ingredientReferences"] == [
+            {"referenceId": reference_id}
+        ]
+        reference_ids.append(reference_id)
+    assert len(set(reference_ids)) == 1
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"name": ""},
+        {"name": " \t"},
+        {"image_url": ""},
+        {"image_url": " \t"},
+        {"ingredients": [{"food": {"name": 123}}]},
+        {"instructions": [{"title": "Missing text"}]},
+        {"tags": [{"id": "a0819c33-1a5e-4374-9151-ed85160c0049"}]},
+        {"tools": [{"name": "Missing id"}]},
+        {"settings": {"showAssets": "not-a-bool"}},
+        {"nutrition": {"calories": []}},
+        {"servings": float("inf")},
+        {"ingredients": [{"quantity": float("inf")}]},
+    ],
+)
+async def test_full_creation_preflights_all_content(invoke, fetcher, arguments):
+    with pytest.raises(ToolError):
+        await invoke("create_recipe_full", **{"name": "Recipe", **arguments})
+    assert fetcher.requests == []
+
+
+@pytest.mark.parametrize(
+    "stage,method,endpoint,occurrence",
+    [
+        ("fetch", "GET", "/api/recipes/test-recipe", 1),
+        ("populate", "PUT", "/api/recipes/test-recipe", 1),
+        ("image", "POST", "/api/recipes/test-recipe/image", 1),
+        ("fetch_image", "GET", "/api/recipes/test-recipe", 2),
+    ],
+)
+async def test_creation_failures_return_recoverable_progress(
+    invoke, fetcher, monkeypatch, caplog, stage, method, endpoint, occurrence
+):
+    original_request = fetcher._handle_request
+    matching_calls = 0
+
+    def fail_stage(request_method, url, **kwargs):
+        nonlocal matching_calls
+        result = original_request(request_method, url, **kwargs)
+        if (request_method, url) == (method, endpoint):
+            matching_calls += 1
+            if matching_calls == occurrence:
+                raise MealieApiError(500, "private-api-response")
+        return result
+
+    monkeypatch.setattr(fetcher, "_handle_request", fail_stage)
+    caplog.set_level(logging.DEBUG, logger="mealie-mcp")
+    with pytest.raises(ToolError) as error:
+        await invoke(
+            "create_recipe_full",
+            name="private-recipe-name",
+            ingredients=["private-ingredient"],
+            image_url="https://example.com/private-image",
+        )
+    # FastMCP prefixes ToolError with the tool name; the recovery object follows.
+    message = str(error.value)
+    recovery = json.loads(message[message.index("{") :])
+    assert recovery["created_slug"] == fetcher.created_slug
+    assert recovery["stage"] == stage
+    assert sum(
+        r["method"] == "POST" and r["url"] == "/api/recipes"
+        for r in fetcher.requests
+    ) == 1
+    assert all(r["method"] != "DELETE" for r in fetcher.requests)
+    assert "private-api-response" not in message
+    for private in (
+        "private-recipe-name",
+        "private-ingredient",
+        "private-image",
+        "private-api-response",
+        fetcher.created_slug,
+    ):
+        assert private not in caplog.text
+
+
+async def test_initial_creation_failure_does_not_claim_a_created_recipe(
+    invoke, fetcher
+):
+    fetcher.fail_on("/api/recipes", 500)
+    with pytest.raises(ToolError) as error:
+        await invoke("create_recipe", name="Recipe", ingredients=[], instructions=[])
+    assert "created_slug" not in str(error.value)
+    assert len(fetcher.requests) == 1
+
+
+async def test_basic_creation_failure_exposes_created_slug(invoke, fetcher):
+    fetcher.fail_on("/api/recipes/test-recipe", 500)
+    with pytest.raises(ToolError) as error:
+        await invoke("create_recipe", name="Recipe", ingredients=[], instructions=[])
+    message = str(error.value)
+    recovery = json.loads(message[message.index("{") :])
+    assert recovery["created_slug"] == fetcher.created_slug
+    assert recovery["stage"] == "fetch"
+    assert [r["method"] for r in fetcher.requests] == ["POST", "GET"]
+
+
+async def test_import_fetch_failure_exposes_created_slug(invoke, fetcher, monkeypatch):
+    monkeypatch.setattr(
+        fetcher, "import_recipe_from_url", lambda *args, **kwargs: fetcher.created_slug
+    )
+    fetcher.fail_on("/api/recipes/test-recipe", 500)
+    with pytest.raises(ToolError) as error:
+        await invoke("import_recipe_from_url", url="https://example.com/recipe")
+    message = str(error.value)
+    recovery = json.loads(message[message.index("{") :])
+    assert recovery["created_slug"] == fetcher.created_slug
+    assert recovery["stage"] == "fetch"
+    assert [r["method"] for r in fetcher.requests] == ["GET"]
+
+
+@pytest.mark.parametrize(
+    "tool_name,arguments,method",
+    [
+        ("create_recipe_full", {"name": "Recipe"}, "PUT"),
+        ("patch_recipe", {"slug": "test-recipe"}, "PATCH"),
+    ],
+)
+async def test_authoring_accepts_fractional_servings(
+    invoke, fetcher, tool_name, arguments, method
+):
+    result = await invoke(tool_name, **arguments, servings=2.5)
+    assert result["recipeServings"] == 2.5
+    assert fetcher.last(method)["json"]["recipeServings"] == 2.5
+    assert "created_slug" not in result
+    assert "stage" not in result
+
+
+async def test_concise_recipe_accepts_fractional_and_nullable_response(invoke, fetcher):
+    fetcher.recipe.update(
+        recipeServings=2.5,
+        recipeYieldQuantity=1.5,
+        dateAdded=None,
+        dateUpdated=None,
+        createdAt=None,
+        updatedAt=None,
+        recipeInstructions=None,
+        recipeCategory=None,
+        tags=None,
+        nutrition=None,
+        settings=None,
+        assets=None,
+        notes=None,
+        extras=None,
+        comments=None,
+    )
+    result = await invoke("get_recipe_concise", slug="test-recipe")
+    assert result["recipeServings"] == 2.5
+    assert result["recipeYieldQuantity"] == 1.5
+    assert "tags" not in result
+
+
+@pytest.mark.parametrize("tool_name", ["create_recipe", "create_recipe_full", "update_recipe"])
+async def test_authoring_preserves_unmodeled_and_nullable_fetched_fields(
+    invoke, fetcher, tool_name
+):
+    fetcher.recipe.update(
+        futureField={"nested": [1, None]},
+        recipeServings=2.5,
+        recipeYieldQuantity=1.5,
+        dateAdded=None,
+        recipeCategory=None,
+        nutrition=None,
+        settings={**fetcher.recipe["settings"], "futureToggle": True},
+        tools=[{"id": "t", "name": "Tool", "slug": "tool", "futureField": True}],
+    )
+    original = deepcopy(fetcher.recipe)
+    arguments = {"ingredients": [], "instructions": []}
+    arguments.update(
+        {"slug": "test-recipe"} if tool_name == "update_recipe" else {"name": "Recipe"}
+    )
+    await invoke(tool_name, **arguments)
+    written = fetcher.last("PUT")["json"]
+    for field in (
+        "futureField", "recipeServings", "recipeYieldQuantity", "dateAdded",
+        "recipeCategory", "nutrition", "settings", "tools",
+    ):
+        assert written[field] == original[field]
+    assert written["recipeIngredient"] == []
+    assert written["recipeInstructions"] == []
+
+
+async def test_full_creation_none_leaves_content_unchanged_and_empty_lists_clear(
+    invoke, fetcher
+):
+    fetcher.recipe.update(
+        recipeIngredient=[{"note": "Keep", "futureField": True}],
+        recipeInstructions=None,
+        tags=[{"id": "t", "name": "Tag", "slug": "tag"}],
+    )
+    await invoke("create_recipe_full", name="Recipe", ingredients=None, tags=[])
+    written = fetcher.last("PUT")["json"]
+    assert written["recipeIngredient"] == [{"note": "Keep", "futureField": True}]
+    assert written["recipeInstructions"] is None
+    assert written["tags"] == []
+
+
+@pytest.mark.parametrize("tool_name", ["create_recipe_full", "patch_recipe"])
+async def test_settings_merge_preserves_unknown_keys_with_nutrition_replacement(
+    invoke, fetcher, tool_name
+):
+    fetcher.recipe["settings"] = {"locked": True, "futureToggle": True}
+    fetcher.recipe["nutrition"] = {"calories": "300", "proteinContent": "20"}
+    arguments = (
+        {"name": "Recipe"} if tool_name == "create_recipe_full" else {"slug": "test-recipe"}
+    )
+    await invoke(
+        tool_name, **arguments, settings={"showAssets": False}, nutrition={}
+    )
+    written = fetcher.last("PUT" if tool_name == "create_recipe_full" else "PATCH")["json"]
+    assert written["settings"] == {
+        "locked": True, "futureToggle": True, "showAssets": False,
+    }
+    assert written["nutrition"] == {}
+
+
+def test_recipe_composition_is_pure_and_handles_nullable_settings():
+    current = {"futureField": {"nested": []}, "settings": None, "nutrition": None}
+    changes = {"settings": {"showAssets": False}}
+    original = deepcopy(current)
+    composed = _compose_recipe(current, changes)
+    composed["futureField"]["nested"].append(1)
+    composed["settings"]["showAssets"] = True
+    assert current == original
+    assert changes == {"settings": {"showAssets": False}}
+    assert composed["nutrition"] is None
+
+
+@pytest.mark.parametrize("tool_name", ["create_recipe_full", "patch_recipe"])
+async def test_authoring_handles_nullable_current_settings(invoke, fetcher, tool_name):
+    fetcher.recipe["settings"] = None
+    arguments = (
+        {"name": "Recipe"} if tool_name == "create_recipe_full" else {"slug": "test-recipe"}
+    )
+    await invoke(tool_name, **arguments, settings={"showAssets": False})
+    written = fetcher.last("PUT" if tool_name == "create_recipe_full" else "PATCH")["json"]
+    assert written["settings"] == {"showAssets": False}
+
+
+async def test_recipe_logs_exclude_search_content_and_validation_details(
+    invoke, fetcher, caplog
+):
+    caplog.set_level(logging.DEBUG, logger="mealie-mcp")
+    await invoke(
+        "get_recipes",
+        search="private-search",
+        tags=["private-tag"],
+        categories=["private-category"],
+    )
+    await invoke(
+        "create_recipe_full", name="private-name", org_url="https://example.com/private-source"
+    )
+    await invoke("get_recipe_detailed", slug="private-slug")
+    with pytest.raises(ToolError):
+        await invoke(
+            "create_recipe_full",
+            name="private-name",
+            ingredients=[{"food": {"id": "private-validation-input"}}],
+        )
+    for private in (
+        "private-search", "private-tag", "private-category", "private-name",
+        "private-source", "private-slug", "private-validation-input",
+    ):
+        assert private not in caplog.text
+
+
+def test_recipe_api_upload_logs_exclude_filenames_and_identifiers(fetcher, caplog):
+    caplog.set_level(logging.DEBUG, logger="mealie-mcp")
+    fetcher.upload_recipe_image("private-slug", b"private-content", "private-file.png")
+    fetcher.upload_recipe_asset("private-slug", b"private-content", "private-file.pdf")
+    for private in ("private-slug", "private-content", "private-file"):
+        assert private not in caplog.text

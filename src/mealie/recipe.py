@@ -21,8 +21,7 @@ def _upload_extension(filename: str, extension: Optional[str] = None) -> str:
     resolved = resolved.strip().lower()
     if not resolved:
         raise ValueError(
-            f"Could not determine a file extension from '{extension or filename}'; "
-            "pass the extension explicitly"
+            "Could not determine a file extension; pass the extension explicitly"
         )
     return resolved
 
@@ -88,7 +87,7 @@ class RecipeMixin:
 
         params = format_api_params(param_dict)
 
-        logger.info({"message": "Retrieving recipes", "parameters": params})
+        logger.info({"message": "Retrieving recipes"})
         return self._handle_request("GET", "/api/recipes", params=params)
 
     def get_recipe(self, slug: str) -> Dict[str, Any]:
@@ -103,7 +102,7 @@ class RecipeMixin:
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
 
-        logger.info({"message": "Retrieving recipe", "slug": slug})
+        logger.info({"message": "Retrieving recipe"})
         return self._handle_request("GET", f"/api/recipes/{slug}")
 
     def update_recipe(self, slug: str, recipe_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -121,7 +120,7 @@ class RecipeMixin:
         if not recipe_data:
             raise ValueError("Recipe data cannot be empty")
 
-        logger.info({"message": "Updating recipe", "slug": slug})
+        logger.info({"message": "Updating recipe"})
         return self._handle_request("PUT", f"/api/recipes/{slug}", json=recipe_data)
 
     def create_recipe(self, name: str) -> str:
@@ -133,7 +132,9 @@ class RecipeMixin:
         Returns:
             Slug of the newly created recipe
         """
-        logger.info({"message": "Creating new recipe", "name": name})
+        if not name.strip():
+            raise ValueError("Recipe name cannot be empty")
+        logger.info({"message": "Creating new recipe"})
         return self._handle_request("POST", "/api/recipes", json={"name": name})
 
     def import_recipe_from_url(
@@ -152,10 +153,10 @@ class RecipeMixin:
         Returns:
             Slug of the newly created recipe
         """
-        if not url:
+        if not url.strip():
             raise ValueError("URL cannot be empty")
 
-        logger.info({"message": "Importing recipe from URL", "url": url})
+        logger.info({"message": "Importing recipe from URL"})
         return self._handle_request(
             "POST",
             "/api/recipes/create/url",
@@ -177,7 +178,7 @@ class RecipeMixin:
         if not recipe_data:
             raise ValueError("Recipe data cannot be empty")
 
-        logger.info({"message": "Patching recipe", "slug": slug})
+        logger.info({"message": "Patching recipe"})
         return self._handle_request("PATCH", f"/api/recipes/{slug}", json=recipe_data)
 
     def set_recipe_categories(self, slug: str, category_ids: List[str]) -> Dict[str, Any]:
@@ -193,7 +194,7 @@ class RecipeMixin:
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
 
-        logger.info({"message": "Setting recipe categories", "slug": slug, "category_ids": category_ids})
+        logger.info({"message": "Setting recipe categories"})
         categories = [self.get_category(cid) for cid in category_ids]
         return self._handle_request("PATCH", f"/api/recipes/{slug}", json={"recipeCategory": categories})
 
@@ -210,7 +211,7 @@ class RecipeMixin:
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
 
-        logger.info({"message": "Setting recipe tags", "slug": slug, "tag_ids": tag_ids})
+        logger.info({"message": "Setting recipe tags"})
         tags = [self.get_tag(tid) for tid in tag_ids]
         return self._handle_request("PATCH", f"/api/recipes/{slug}", json={"tags": tags})
 
@@ -235,7 +236,7 @@ class RecipeMixin:
         if category_ids is None and tag_ids is None:
             raise ValueError("At least one of category_ids or tag_ids must be provided")
 
-        logger.info({"message": "Setting recipe categories and tags", "slug": slug})
+        logger.info({"message": "Setting recipe categories and tags"})
         recipe_data = {}
         if category_ids is not None:
             recipe_data["recipeCategory"] = [self.get_category(cid) for cid in category_ids]
@@ -260,7 +261,7 @@ class RecipeMixin:
         if name:
             payload["name"] = name
 
-        logger.info({"message": "Duplicating recipe", "slug": slug})
+        logger.info({"message": "Duplicating recipe"})
         return self._handle_request("POST", f"/api/recipes/{slug}/duplicate", json=payload)
 
     def update_recipe_last_made(self, slug: str, timestamp: Optional[str] = None) -> Dict[str, Any]:
@@ -283,7 +284,7 @@ class RecipeMixin:
 
         payload = {"timestamp": timestamp}
 
-        logger.info({"message": "Updating recipe last made", "slug": slug})
+        logger.info({"message": "Updating recipe last made"})
         return self._handle_request("PATCH", f"/api/recipes/{slug}/last-made", json=payload)
 
     def scrape_recipe_image_from_url(self, slug: str, image_url: str) -> Dict[str, Any]:
@@ -303,7 +304,7 @@ class RecipeMixin:
 
         payload = {"url": image_url}
 
-        logger.info({"message": "Scraping recipe image from URL", "slug": slug, "url": image_url})
+        logger.info({"message": "Scraping recipe image from URL"})
         return self._handle_request("POST", f"/api/recipes/{slug}/image", json=payload)
 
     def upload_recipe_image(
@@ -337,14 +338,7 @@ class RecipeMixin:
         # Mealie requires the extension as a separate form field
         data = {"extension": extension}
 
-        logger.info(
-            {
-                "message": "Uploading recipe image",
-                "slug": slug,
-                "filename": filename,
-                "extension": extension,
-            }
-        )
+        logger.info({"message": "Uploading recipe image"})
         return self._handle_request("PUT", f"/api/recipes/{slug}/image", files=files, data=data)
 
     def upload_recipe_asset(
@@ -383,14 +377,7 @@ class RecipeMixin:
         # Mealie requires name, icon and extension as separate form fields
         data = {"name": name, "icon": icon or "mdi-file", "extension": extension}
 
-        logger.info(
-            {
-                "message": "Uploading recipe asset",
-                "slug": slug,
-                "filename": filename,
-                "extension": extension,
-            }
-        )
+        logger.info({"message": "Uploading recipe asset"})
         return self._handle_request("POST", f"/api/recipes/{slug}/assets", files=files, data=data)
 
     def delete_recipe(self, slug: str) -> Dict[str, Any]:
@@ -405,5 +392,5 @@ class RecipeMixin:
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
 
-        logger.info({"message": "Deleting recipe", "slug": slug})
+        logger.info({"message": "Deleting recipe"})
         return self._handle_request("DELETE", f"/api/recipes/{slug}")
