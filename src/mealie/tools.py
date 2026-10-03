@@ -3,6 +3,8 @@ from typing import Any, Dict, Optional
 
 from utils import format_api_params
 
+from .updates import merge_replacement_record
+
 logger = logging.getLogger("mealie-mcp")
 
 
@@ -18,8 +20,8 @@ class ToolsMixin:
     ) -> Dict[str, Any]:
         """List the household's recipe tools (optionally filtered by search term).
 
-        Each tool includes ``householdsWithTool``, which distinguishes tools the
-        household owns from tools that merely exist in the database.
+        Each tool includes ``householdsWithTool``, a list of household IDs.
+        Ownership requires membership of the relevant household ID in that list.
 
         Args:
             search: Search term to filter tools by name
@@ -38,7 +40,7 @@ class ToolsMixin:
         }
         params = format_api_params(param_dict)
 
-        logger.info({"message": "Retrieving tools", "parameters": params})
+        logger.info({"message": "Retrieving tools"})
         return self._handle_request("GET", "/api/organizers/tools", params=params)
 
     def create_tool(self, name: str) -> Dict[str, Any]:
@@ -55,7 +57,7 @@ class ToolsMixin:
 
         payload = {"name": name}
 
-        logger.info({"message": "Creating tool", "name": name})
+        logger.info({"message": "Creating tool"})
         return self._handle_request("POST", "/api/organizers/tools", json=payload)
 
     def get_tool(self, tool_id: str) -> Dict[str, Any]:
@@ -70,7 +72,7 @@ class ToolsMixin:
         if not tool_id:
             raise ValueError("Tool ID cannot be empty")
 
-        logger.info({"message": "Retrieving tool", "tool_id": tool_id})
+        logger.info({"message": "Retrieving tool"})
         return self._handle_request("GET", f"/api/organizers/tools/{tool_id}")
 
     def get_tool_by_slug(self, tool_slug: str) -> Dict[str, Any]:
@@ -85,15 +87,16 @@ class ToolsMixin:
         if not tool_slug:
             raise ValueError("Tool slug cannot be empty")
 
-        logger.info({"message": "Retrieving tool by slug", "tool_slug": tool_slug})
+        logger.info({"message": "Retrieving tool by slug"})
         return self._handle_request("GET", f"/api/organizers/tools/slug/{tool_slug}")
 
     def update_tool(self, tool_id: str, tool_data: Dict[str, Any]) -> Dict[str, Any]:
         """Update a specific tool.
 
         Mealie's PUT replaces the whole record, so we fetch the existing tool
-        and merge the provided fields over it (preserving unset fields and
-        keeping the required ``id``/``name`` in the body).
+        and merge the provided fields over it, preserving household ownership
+        and the required ``name``. An invalid or incomplete read is rejected
+        before issuing the PUT.
 
         Args:
             tool_id: The UUID of the tool to update
@@ -108,9 +111,11 @@ class ToolsMixin:
             raise ValueError("Tool data cannot be empty")
 
         existing = self.get_tool(tool_id)
-        merged = {**existing, **tool_data} if isinstance(existing, dict) else tool_data
+        merged = merge_replacement_record(
+            existing, tool_data, required_fields=("id", "name", "slug")
+        )
 
-        logger.info({"message": "Updating tool", "tool_id": tool_id})
+        logger.info({"message": "Updating tool"})
         return self._handle_request(
             "PUT", f"/api/organizers/tools/{tool_id}", json=merged
         )
@@ -127,5 +132,5 @@ class ToolsMixin:
         if not tool_id:
             raise ValueError("Tool ID cannot be empty")
 
-        logger.info({"message": "Deleting tool", "tool_id": tool_id})
+        logger.info({"message": "Deleting tool"})
         return self._handle_request("DELETE", f"/api/organizers/tools/{tool_id}")

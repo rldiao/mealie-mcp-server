@@ -1,13 +1,9 @@
-import logging
-import traceback
 from typing import Any, Dict, Optional
 
 from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.exceptions import ToolError
 
 from mealie import MealieFetcher
-
-logger = logging.getLogger("mealie-mcp")
+from tools.errors import tool_error_boundary
 
 
 def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
@@ -23,8 +19,9 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
         Use this to resolve a tool id+name before assigning it to a recipe via
         create_recipe_full or patch_recipe. Each item includes
-        ``householdsWithTool``: a non-empty value means the household owns the
-        tool, an empty list means it only exists in the database.
+        ``householdsWithTool``, a list of household IDs. A household owns the
+        tool only if its ID appears in that list; a non-empty list alone does
+        not establish ownership by the current household.
 
         Args:
             search: Search term to filter tools by name.
@@ -34,18 +31,8 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Tools (under "items") with pagination information.
         """
-        try:
-            logger.info(
-                {"message": "Fetching tools", "search": search, "per_page": per_page}
-            )
+        with tool_error_boundary("Error fetching tools"):
             return mealie.get_tools(search=search, page=page, per_page=per_page)
-        except Exception as e:
-            error_msg = f"Error fetching tools: {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def create_tool(name: str) -> Dict[str, Any]:
@@ -57,16 +44,8 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The created tool.
         """
-        try:
-            logger.info({"message": "Creating tool", "name": name})
+        with tool_error_boundary("Error creating tool"):
             return mealie.create_tool(name)
-        except Exception as e:
-            error_msg = f"Error creating tool '{name}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def get_tool(tool_id: str) -> Dict[str, Any]:
@@ -78,16 +57,8 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The tool details.
         """
-        try:
-            logger.info({"message": "Fetching tool", "tool_id": tool_id})
+        with tool_error_boundary("Error fetching tool"):
             return mealie.get_tool(tool_id)
-        except Exception as e:
-            error_msg = f"Error fetching tool '{tool_id}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def get_tool_by_slug(tool_slug: str) -> Dict[str, Any]:
@@ -99,16 +70,8 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The tool details.
         """
-        try:
-            logger.info({"message": "Fetching tool by slug", "tool_slug": tool_slug})
+        with tool_error_boundary("Error fetching tool by slug"):
             return mealie.get_tool_by_slug(tool_slug)
-        except Exception as e:
-            error_msg = f"Error fetching tool by slug '{tool_slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def update_tool(
@@ -124,9 +87,7 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The updated tool.
         """
-        try:
-            logger.info({"message": "Updating tool", "tool_id": tool_id})
-
+        with tool_error_boundary("Error updating tool"):
             tool_data: Dict[str, Any] = {}
             if name is not None:
                 tool_data["name"] = name
@@ -135,13 +96,6 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 raise ValueError("At least one field must be provided to update")
 
             return mealie.update_tool(tool_id, tool_data)
-        except Exception as e:
-            error_msg = f"Error updating tool '{tool_id}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def delete_tool(tool_id: str) -> Dict[str, Any]:
@@ -153,13 +107,5 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Confirmation of deletion.
         """
-        try:
-            logger.info({"message": "Deleting tool", "tool_id": tool_id})
+        with tool_error_boundary("Error deleting tool"):
             return mealie.delete_tool(tool_id)
-        except Exception as e:
-            error_msg = f"Error deleting tool '{tool_id}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)

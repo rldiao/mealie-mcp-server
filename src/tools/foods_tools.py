@@ -1,13 +1,9 @@
-import logging
-import traceback
 from typing import Any, Dict, Optional
 
 from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.exceptions import ToolError
 
 from mealie import MealieFetcher
-
-logger = logging.getLogger("mealie-mcp")
+from tools.errors import tool_error_boundary
 
 
 def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
@@ -34,18 +30,8 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Foods (under "items") with pagination information.
         """
-        try:
-            logger.info(
-                {"message": "Fetching foods", "search": search, "per_page": per_page}
-            )
+        with tool_error_boundary("Error fetching foods"):
             return mealie.get_foods(search=search, page=page, per_page=per_page)
-        except Exception as e:
-            error_msg = f"Error fetching foods: {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def create_food(
@@ -69,8 +55,7 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The created food.
         """
-        try:
-            logger.info({"message": "Creating food", "name": name})
+        with tool_error_boundary("Error creating food"):
             return mealie.create_food(
                 name,
                 plural_name=plural_name,
@@ -78,13 +63,6 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 extras=extras,
                 label_id=label_id,
             )
-        except Exception as e:
-            error_msg = f"Error creating food '{name}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def get_food(food_id: str) -> Dict[str, Any]:
@@ -96,16 +74,8 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The food details.
         """
-        try:
-            logger.info({"message": "Fetching food", "food_id": food_id})
+        with tool_error_boundary("Error fetching food"):
             return mealie.get_food(food_id)
-        except Exception as e:
-            error_msg = f"Error fetching food '{food_id}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def update_food(
@@ -131,9 +101,7 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The updated food.
         """
-        try:
-            logger.info({"message": "Updating food", "food_id": food_id})
-
+        with tool_error_boundary("Error updating food"):
             food_data: Dict[str, Any] = {}
             if name is not None:
                 food_data["name"] = name
@@ -152,13 +120,6 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 raise ValueError("At least one field must be provided to update")
 
             return mealie.update_food(food_id, food_data)
-        except Exception as e:
-            error_msg = f"Error updating food '{food_id}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def delete_food(food_id: str) -> Dict[str, Any]:
@@ -170,13 +131,5 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Confirmation of deletion.
         """
-        try:
-            logger.info({"message": "Deleting food", "food_id": food_id})
+        with tool_error_boundary("Error deleting food"):
             return mealie.delete_food(food_id)
-        except Exception as e:
-            error_msg = f"Error deleting food '{food_id}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)

@@ -48,7 +48,7 @@ class TagsMixin:
 
         params = format_api_params(param_dict)
 
-        logger.info({"message": "Retrieving tags", "parameters": params})
+        logger.info({"message": "Retrieving tags"})
         return self._handle_request("GET", "/api/organizers/tags", params=params)
 
     def get_empty_tags(self) -> List[Dict[str, Any]]:
@@ -74,7 +74,7 @@ class TagsMixin:
 
         payload = {"name": name}
 
-        logger.info({"message": "Creating tag", "name": name})
+        logger.info({"message": "Creating tag"})
         return self._handle_request("POST", "/api/organizers/tags", json=payload)
 
     def get_tag(self, tag_id: str) -> Dict[str, Any]:
@@ -89,7 +89,7 @@ class TagsMixin:
         if not tag_id:
             raise ValueError("Tag ID cannot be empty")
 
-        logger.info({"message": "Retrieving tag", "tag_id": tag_id})
+        logger.info({"message": "Retrieving tag"})
         return self._handle_request("GET", f"/api/organizers/tags/{tag_id}")
 
     def get_tag_by_slug(self, tag_slug: str) -> Dict[str, Any]:
@@ -104,7 +104,7 @@ class TagsMixin:
         if not tag_slug:
             raise ValueError("Tag slug cannot be empty")
 
-        logger.info({"message": "Retrieving tag by slug", "tag_slug": tag_slug})
+        logger.info({"message": "Retrieving tag by slug"})
         return self._handle_request("GET", f"/api/organizers/tags/slug/{tag_slug}")
 
     def update_tag(self, tag_id: str, tag_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -122,7 +122,7 @@ class TagsMixin:
         if not tag_data:
             raise ValueError("Tag data cannot be empty")
 
-        logger.info({"message": "Updating tag", "tag_id": tag_id})
+        logger.info({"message": "Updating tag"})
         return self._handle_request("PUT", f"/api/organizers/tags/{tag_id}", json=tag_data)
 
     def delete_tag(self, tag_id: str) -> Dict[str, Any]:
@@ -137,5 +137,5 @@ class TagsMixin:
         if not tag_id:
             raise ValueError("Tag ID cannot be empty")
 
-        logger.info({"message": "Deleting tag", "tag_id": tag_id})
+        logger.info({"message": "Deleting tag"})
         return self._handle_request("DELETE", f"/api/organizers/tags/{tag_id}")

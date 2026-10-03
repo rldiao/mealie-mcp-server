@@ -1,13 +1,9 @@
-import logging
-import traceback
 from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.exceptions import ToolError
 
 from mealie import MealieFetcher
-
-logger = logging.getLogger("mealie-mcp")
+from tools.errors import tool_error_boundary
 
 
 def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
@@ -27,14 +23,8 @@ def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Tags with pagination information
         """
-        try:
-            logger.info({"message": "Fetching tags", "page": page, "per_page": per_page})
+        with tool_error_boundary("Error fetching tags"):
             return mealie.get_tags(page=page, per_page=per_page)
-        except Exception as e:
-            error_msg = f"Error fetching tags: {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def get_empty_tags() -> List[Dict[str, Any]]:
@@ -43,14 +33,8 @@ def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             List[Dict[str, Any]]: List of empty tags
         """
-        try:
-            logger.info({"message": "Fetching empty tags"})
+        with tool_error_boundary("Error fetching empty tags"):
             return mealie.get_empty_tags()
-        except Exception as e:
-            error_msg = f"Error fetching empty tags: {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def create_tag(name: str) -> Dict[str, Any]:
@@ -62,14 +46,8 @@ def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The created tag details
         """
-        try:
-            logger.info({"message": "Creating tag", "name": name})
+        with tool_error_boundary("Error creating tag"):
             return mealie.create_tag(name)
-        except Exception as e:
-            error_msg = f"Error creating tag '{name}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def get_tag(tag_id: str) -> Dict[str, Any]:
@@ -81,14 +59,8 @@ def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The tag details including associated recipes
         """
-        try:
-            logger.info({"message": "Fetching tag", "tag_id": tag_id})
+        with tool_error_boundary("Error fetching tag"):
             return mealie.get_tag(tag_id)
-        except Exception as e:
-            error_msg = f"Error fetching tag '{tag_id}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def get_tag_by_slug(tag_slug: str) -> Dict[str, Any]:
@@ -100,14 +72,8 @@ def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The tag details including associated recipes
         """
-        try:
-            logger.info({"message": "Fetching tag by slug", "tag_slug": tag_slug})
+        with tool_error_boundary("Error fetching tag by slug"):
             return mealie.get_tag_by_slug(tag_slug)
-        except Exception as e:
-            error_msg = f"Error fetching tag by slug '{tag_slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def update_tag(
@@ -123,9 +89,7 @@ def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The updated tag details
         """
-        try:
-            logger.info({"message": "Updating tag", "tag_id": tag_id})
-
+        with tool_error_boundary("Error updating tag"):
             tag_data = {}
             if name is not None:
                 tag_data["name"] = name
@@ -134,11 +98,6 @@ def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 raise ValueError("At least one field must be provided to update")
 
             return mealie.update_tag(tag_id, tag_data)
-        except Exception as e:
-            error_msg = f"Error updating tag '{tag_id}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def delete_tag(tag_id: str) -> Dict[str, Any]:
@@ -150,11 +109,5 @@ def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Confirmation of deletion
         """
-        try:
-            logger.info({"message": "Deleting tag", "tag_id": tag_id})
+        with tool_error_boundary("Error deleting tag"):
             return mealie.delete_tag(tag_id)
-        except Exception as e:
-            error_msg = f"Error deleting tag '{tag_id}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)

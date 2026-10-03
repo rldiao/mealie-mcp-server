@@ -1,13 +1,9 @@
-import logging
-import traceback
 from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.exceptions import ToolError
 
 from mealie import MealieFetcher
-
-logger = logging.getLogger("mealie-mcp")
+from tools.errors import tool_error_boundary
 
 
 def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
@@ -27,14 +23,8 @@ def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Categories with pagination information
         """
-        try:
-            logger.info({"message": "Fetching categories", "page": page, "per_page": per_page})
+        with tool_error_boundary("Error fetching categories"):
             return mealie.get_categories(page=page, per_page=per_page)
-        except Exception as e:
-            error_msg = f"Error fetching categories: {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def get_empty_categories() -> List[Dict[str, Any]]:
@@ -43,14 +33,8 @@ def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             List[Dict[str, Any]]: List of empty categories
         """
-        try:
-            logger.info({"message": "Fetching empty categories"})
+        with tool_error_boundary("Error fetching empty categories"):
             return mealie.get_empty_categories()
-        except Exception as e:
-            error_msg = f"Error fetching empty categories: {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def create_category(name: str) -> Dict[str, Any]:
@@ -62,14 +46,8 @@ def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The created category details
         """
-        try:
-            logger.info({"message": "Creating category", "name": name})
+        with tool_error_boundary("Error creating category"):
             return mealie.create_category(name)
-        except Exception as e:
-            error_msg = f"Error creating category '{name}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def get_category(category_id: str) -> Dict[str, Any]:
@@ -79,16 +57,10 @@ def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             category_id: The UUID of the category
 
         Returns:
-            Dict[str, Any]: The category details including associated recipes
+            Dict[str, Any]: The category ID, slug, and name
         """
-        try:
-            logger.info({"message": "Fetching category", "category_id": category_id})
+        with tool_error_boundary("Error fetching category"):
             return mealie.get_category(category_id)
-        except Exception as e:
-            error_msg = f"Error fetching category '{category_id}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def get_category_by_slug(category_slug: str) -> Dict[str, Any]:
@@ -98,16 +70,10 @@ def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             category_slug: The slug of the category (e.g., "breakfast", "desserts")
 
         Returns:
-            Dict[str, Any]: The category details including associated recipes
+            Dict[str, Any]: The category details
         """
-        try:
-            logger.info({"message": "Fetching category by slug", "category_slug": category_slug})
+        with tool_error_boundary("Error fetching category by slug"):
             return mealie.get_category_by_slug(category_slug)
-        except Exception as e:
-            error_msg = f"Error fetching category by slug '{category_slug}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def update_category(
@@ -123,9 +89,7 @@ def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The updated category details
         """
-        try:
-            logger.info({"message": "Updating category", "category_id": category_id})
-
+        with tool_error_boundary("Error updating category"):
             category_data = {}
             if name is not None:
                 category_data["name"] = name
@@ -134,11 +98,6 @@ def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 raise ValueError("At least one field must be provided to update")
 
             return mealie.update_category(category_id, category_data)
-        except Exception as e:
-            error_msg = f"Error updating category '{category_id}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def delete_category(category_id: str) -> Dict[str, Any]:
@@ -150,11 +109,5 @@ def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Confirmation of deletion
         """
-        try:
-            logger.info({"message": "Deleting category", "category_id": category_id})
+        with tool_error_boundary("Error deleting category"):
             return mealie.delete_category(category_id)
-        except Exception as e:
-            error_msg = f"Error deleting category '{category_id}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
-            raise ToolError(error_msg)
