@@ -6,6 +6,27 @@ from utils import format_api_params
 logger = logging.getLogger("mealie-mcp")
 
 
+def _upload_extension(filename: str, extension: Optional[str] = None) -> str:
+    """Resolve the bare extension (no dot, lowercase) for a Mealie upload.
+
+    Mealie takes the extension as a separate form field on the image and asset
+    upload endpoints instead of deriving it from the uploaded file name.
+    """
+    if extension:
+        resolved = extension.strip().lstrip(".")
+    else:
+        stem, dot, suffix = filename.strip().rpartition(".")
+        resolved = suffix if dot and stem else ""
+
+    resolved = resolved.strip().lower()
+    if not resolved:
+        raise ValueError(
+            f"Could not determine a file extension from '{extension or filename}'; "
+            "pass the extension explicitly"
+        )
+    return resolved
+
+
 class RecipeMixin:
     """Mixin class for recipe-related API endpoints"""
 
@@ -285,13 +306,20 @@ class RecipeMixin:
         logger.info({"message": "Scraping recipe image from URL", "slug": slug, "url": image_url})
         return self._handle_request("POST", f"/api/recipes/{slug}/image", json=payload)
 
-    def upload_recipe_image(self, slug: str, image_data: bytes, filename: str) -> Dict[str, Any]:
+    def upload_recipe_image(
+        self,
+        slug: str,
+        image_data: bytes,
+        filename: str,
+        extension: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Upload a recipe image file (multipart upload)
 
         Args:
             slug: The slug identifier of the recipe
             image_data: Binary image data
             filename: Name of the image file
+            extension: Image extension such as "jpg"; derived from filename when omitted
 
         Returns:
             JSON response confirming the image was uploaded
@@ -303,18 +331,40 @@ class RecipeMixin:
         if not filename:
             raise ValueError("Filename cannot be empty")
 
+        extension = _upload_extension(filename, extension)
+
         files = {"image": (filename, image_data)}
+        # Mealie requires the extension as a separate form field
+        data = {"extension": extension}
 
-        logger.info({"message": "Uploading recipe image", "slug": slug, "filename": filename})
-        return self._handle_request("PUT", f"/api/recipes/{slug}/image", files=files)
+        logger.info(
+            {
+                "message": "Uploading recipe image",
+                "slug": slug,
+                "filename": filename,
+                "extension": extension,
+            }
+        )
+        return self._handle_request("PUT", f"/api/recipes/{slug}/image", files=files, data=data)
 
-    def upload_recipe_asset(self, slug: str, asset_data: bytes, filename: str) -> Dict[str, Any]:
+    def upload_recipe_asset(
+        self,
+        slug: str,
+        asset_data: bytes,
+        filename: str,
+        name: Optional[str] = None,
+        icon: Optional[str] = None,
+        extension: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Upload a recipe asset file (multipart upload)
 
         Args:
             slug: The slug identifier of the recipe
             asset_data: Binary asset data
             filename: Name of the asset file
+            name: Display name of the asset; derived from filename when omitted
+            icon: Material Design icon name; defaults to "mdi-file"
+            extension: Asset extension such as "pdf"; derived from filename when omitted
 
         Returns:
             JSON response containing the uploaded asset details
@@ -326,10 +376,22 @@ class RecipeMixin:
         if not filename:
             raise ValueError("Filename cannot be empty")
 
-        files = {"file": (filename, asset_data)}
+        extension = _upload_extension(filename, extension)
+        name = name or filename.rsplit(".", 1)[0] or filename
 
-        logger.info({"message": "Uploading recipe asset", "slug": slug, "filename": filename})
-        return self._handle_request("POST", f"/api/recipes/{slug}/assets", files=files)
+        files = {"file": (filename, asset_data)}
+        # Mealie requires name, icon and extension as separate form fields
+        data = {"name": name, "icon": icon or "mdi-file", "extension": extension}
+
+        logger.info(
+            {
+                "message": "Uploading recipe asset",
+                "slug": slug,
+                "filename": filename,
+                "extension": extension,
+            }
+        )
+        return self._handle_request("POST", f"/api/recipes/{slug}/assets", files=files, data=data)
 
     def delete_recipe(self, slug: str) -> Dict[str, Any]:
         """Delete a recipe
