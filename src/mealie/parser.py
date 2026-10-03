@@ -23,7 +23,7 @@ class ParserMixin:
         if not ingredient:
             raise ValueError("Ingredient cannot be empty")
 
-        logger.info({"message": "Parsing ingredient", "parser": parser})
+        logger.info({"message": "Parsing ingredient"})
         return self._handle_request(
             "POST",
             "/api/parser/ingredient",
@@ -48,7 +48,6 @@ class ParserMixin:
         logger.info(
             {
                 "message": "Parsing ingredients",
-                "parser": parser,
                 "count": len(ingredients),
             }
         )

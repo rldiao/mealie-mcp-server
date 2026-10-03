@@ -1,5 +1,7 @@
 """Tests for the ingredient-parser tools (single, batch, flattening, verbose)."""
 
+import logging
+
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 
@@ -87,11 +89,8 @@ async def test_parse_ingredients_rejects_empty_list(invoke, fetcher):
 async def test_parsed_result_feeds_create_recipe_full(invoke, fetcher):
     """The parser output must be usable as a structured ingredient verbatim."""
     parsed = await invoke("parse_ingredient", ingredient="1/4 cup chopped onion")
-    ingredient = {
-        k: v for k, v in parsed.items() if k in ("quantity", "unit", "food", "note")
-    }
 
-    await invoke("create_recipe_full", name="Parsed", ingredients=[ingredient])
+    await invoke("create_recipe_full", name="Parsed", ingredients=[parsed])
 
     written = fetcher.last("PUT", "/api/recipes/")["json"]["recipeIngredient"][0]
     assert written["quantity"] == 0.25
@@ -111,3 +110,32 @@ async def test_parse_ingredients_surfaces_client_failure(invoke, fetcher):
 
     with pytest.raises(ToolError, match="Error parsing ingredients"):
         await invoke("parse_ingredients", ingredients=["2 eggs"])
+
+
+@pytest.mark.parametrize(
+    "tool_name,arguments",
+    [
+        ("parse_ingredient", {"ingredient": "private-ingredient"}),
+        ("parse_ingredients", {"ingredients": ["private-ingredient"]}),
+    ],
+)
+async def test_parser_logs_exclude_inputs_and_client_errors(
+    invoke, fetcher, caplog, tool_name, arguments
+):
+    caplog.set_level(logging.DEBUG, logger="mealie-mcp")
+    await invoke(tool_name, **arguments)
+    fetcher.fail_on("/api/parser/", 500, "private-error-response")
+    with pytest.raises(ToolError):
+        await invoke(tool_name, **arguments)
+    assert "private-ingredient" not in caplog.text
+    assert "private-error-response" not in caplog.text
+
+
+async def test_parser_validation_does_not_log_user_supplied_parser(invoke, caplog):
+    caplog.set_level(logging.DEBUG, logger="mealie-mcp")
+    with pytest.raises(ToolError, match="parser must be one of"):
+        await invoke(
+            "parse_ingredient", ingredient="private-ingredient", parser="private-parser"
+        )
+    assert "private-parser" not in caplog.text
+    assert "private-ingredient" not in caplog.text

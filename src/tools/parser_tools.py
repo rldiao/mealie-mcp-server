@@ -1,13 +1,9 @@
-import logging
-import traceback
 from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.exceptions import ToolError
 
 from mealie import MealieFetcher
-
-logger = logging.getLogger("mealie-mcp")
+from tools.errors import tool_error_boundary
 
 _PARSERS = ("nlp", "brute", "openai")
 
@@ -76,18 +72,10 @@ def register_parser_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: input, confidence, quantity, unit, food, and note.
         """
-        try:
+        with tool_error_boundary("Error parsing ingredient"):
             _validate_parser(parser)
-            logger.info({"message": "Parsing ingredient", "parser": parser})
             parsed = mealie.parse_ingredient(ingredient, parser=parser)
             return parsed if verbose else _flatten(parsed)
-        except Exception as e:
-            error_msg = f"Error parsing ingredient: {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def parse_ingredients(
@@ -111,21 +99,7 @@ def register_parser_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             List[Dict[str, Any]]: One result per input line, in the same order,
             each with input, confidence, quantity, unit, food, and note.
         """
-        try:
+        with tool_error_boundary("Error parsing ingredients"):
             _validate_parser(parser)
-            logger.info(
-                {
-                    "message": "Parsing ingredients",
-                    "parser": parser,
-                    "count": len(ingredients),
-                }
-            )
             parsed = mealie.parse_ingredients(ingredients, parser=parser)
             return parsed if verbose else [_flatten(p) for p in parsed]
-        except Exception as e:
-            error_msg = f"Error parsing ingredients: {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
