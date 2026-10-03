@@ -129,6 +129,37 @@ async def test_patch_recipe_maps_all_fields(invoke, fetcher):
     }
 
 
+async def test_create_recipe_full_sets_nutrition(invoke, fetcher):
+    await invoke(
+        "create_recipe_full",
+        name="Nutritious",
+        nutrition={"calories": "450", "proteinContent": 20, "sodiumContent": "310"},
+    )
+    body = fetcher.last("PUT", "/api/recipes/")["json"]
+    # numbers are coerced to the strings Mealie stores; unset keys are omitted
+    assert body["nutrition"] == {
+        "calories": "450",
+        "proteinContent": "20",
+        "sodiumContent": "310",
+    }
+
+
+async def test_create_recipe_full_without_nutrition_sends_empty_object(invoke, fetcher):
+    await invoke("create_recipe_full", name="Plain", ingredients=["1 onion"])
+    body = fetcher.last("PUT", "/api/recipes/")["json"]
+    assert body["nutrition"] == {}
+
+
+async def test_patch_recipe_sets_nutrition(invoke, fetcher):
+    await invoke(
+        "patch_recipe",
+        slug="test-recipe",
+        nutrition={"calories": "450", "fatContent": "12"},
+    )
+    body = fetcher.last("PATCH", "/api/recipes/")["json"]
+    assert body == {"nutrition": {"calories": "450", "fatContent": "12"}}
+
+
 async def test_get_recipe_concise_includes_orgurl_tags_tools(invoke, fetcher):
     fetcher.recipe = {
         **fetcher.recipe,

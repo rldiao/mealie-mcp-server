@@ -80,6 +80,16 @@ And these instructions:
 "Update the yield of the soup recipe to '6 servings'"
 ```
 
+### Nutrition
+
+```
+"Add nutrition to the chicken curry: 520 calories, 31g protein, 18g fat,
+ 42g carbs, 780mg sodium"
+```
+
+Values are per serving. Mealie replaces the whole nutrition object, so ask for
+every value you want to keep in a single request.
+
 ### Recipe Images
 
 **From URL:**

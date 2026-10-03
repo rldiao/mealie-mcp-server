@@ -13,6 +13,7 @@ A comprehensive Model Context Protocol (MCP) server that enables AI assistants t
 - **Image Management**: Upload images or scrape from URLs
 - **Asset Uploads**: Attach documents and files to recipes
 - **Metadata Tracking**: Mark recipes as made, track last made dates
+- **Nutrition**: Set per-serving nutrition when creating or patching a recipe
 
 ### 🛒 Shopping Lists
 
@@ -122,9 +123,9 @@ Restart Claude Desktop to load the server.
 - `get_recipe_detailed` - Get complete recipe details
 - `get_recipe_concise` - Get recipe summary
 - `create_recipe` - Create new recipe (flat or structured ingredients)
-- `create_recipe_full` - Create a recipe with full content in one call
+- `create_recipe_full` - Create a recipe with full content (including nutrition) in one call
 - `update_recipe` - Update recipe (full replacement)
-- `patch_recipe` - Update specific fields only
+- `patch_recipe` - Update specific fields only (including nutrition)
 - `duplicate_recipe` - Clone a recipe
 - `mark_recipe_last_made` - Update last made timestamp
 - `set_recipe_image_from_url` - Set image from URL
@@ -276,6 +277,16 @@ When filtering recipes, you **must use slugs or UUIDs**, not display names:
 ```
 
 Use `get_tags()` or `get_categories()` first to find the correct slugs.
+
+### Nutrition Is Replaced, Not Merged
+
+Mealie replaces the whole `nutrition` object on write. `patch_recipe` follows
+suit, so pass every value you want to keep:
+
+```
+# clears every nutrition value except fat
+patch_recipe(slug="...", nutrition={"fatContent": "12"})
+```
 
 ### Field Preservation
 

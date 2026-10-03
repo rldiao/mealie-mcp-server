@@ -7,6 +7,7 @@ from models.recipe import (
     Recipe,
     RecipeIngredientInput,
     RecipeInstructionInput,
+    RecipeNutrition,
 )
 
 
@@ -92,3 +93,13 @@ def test_recipe_instruction_input_carries_summary():
 def test_organizer_ref_requires_id_and_name():
     org = OrganizerRef(id="t1", name="Quick")
     assert org.model_dump(exclude_none=True) == {"id": "t1", "name": "Quick"}
+
+
+def test_recipe_nutrition_coerces_numbers_to_strings():
+    nutrition = RecipeNutrition(calories=450, fatContent=31.5)
+    assert nutrition.calories == "450"
+    assert nutrition.fatContent == "31.5"
+    assert nutrition.model_dump(exclude_none=True) == {
+        "calories": "450",
+        "fatContent": "31.5",
+    }
