@@ -50,29 +50,30 @@ def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             return mealie.create_category(name)
 
     @mcp.tool()
-    def get_category(category_id: str) -> Dict[str, Any]:
-        """Get a specific category by ID.
+    def get_category(
+        category_id: Optional[str] = None,
+        category_slug: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Get a specific category by ID or slug. Provide exactly one nonempty identifier.
 
         Args:
             category_id: The UUID of the category
+            category_slug: The slug of the category (e.g., "breakfast", "desserts")
 
         Returns:
             Dict[str, Any]: The category ID, slug, and name
         """
         with tool_error_boundary("Error fetching category"):
-            return mealie.get_category(category_id)
-
-    @mcp.tool()
-    def get_category_by_slug(category_slug: str) -> Dict[str, Any]:
-        """Get a specific category by its slug.
-
-        Args:
-            category_slug: The slug of the category (e.g., "breakfast", "desserts")
-
-        Returns:
-            Dict[str, Any]: The category details
-        """
-        with tool_error_boundary("Error fetching category by slug"):
+            if (
+                (category_id is None) == (category_slug is None)
+                or (category_id is not None and not category_id.strip())
+                or (category_slug is not None and not category_slug.strip())
+            ):
+                raise ValueError(
+                    "Provide exactly one nonempty category_id or category_slug"
+                )
+            if category_id is not None:
+                return mealie.get_category(category_id)
             return mealie.get_category_by_slug(category_slug)
 
     @mcp.tool()

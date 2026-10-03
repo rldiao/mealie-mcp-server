@@ -65,6 +65,7 @@ async def test_get_by_id(invoke, fetcher, organizer):
     result = await invoke(f"get_{singular}", **{f"{singular}_id": "record-1"})
     assert fetcher.last("GET")["url"] == f"{endpoint}/record-1"
     assert result["id"] == "record-1"
+    assert len(fetcher.requests) == 1
 
 
 async def test_update_preserves_resource_specific_request_flow(
@@ -101,8 +102,12 @@ async def test_slug_lookup(invoke, fetcher, singular, plural, endpoint):
     fetcher.responses["GET", url] = {
         "id": "record-1", "name": "Synthetic", "slug": "synthetic-slug"
     }
-    await invoke(f"get_{singular}_by_slug", **{f"{singular}_slug": "synthetic-slug"})
+    result = await invoke(
+        f"get_{singular}", **{f"{singular}_slug": "synthetic-slug"}
+    )
     assert fetcher.last("GET")["url"] == url
+    assert result == fetcher.responses["GET", url]
+    assert len(fetcher.requests) == 1
 
 
 @pytest.mark.parametrize("plural", ["categories", "tags"])
@@ -130,10 +135,76 @@ async def test_validation_fails_before_request(invoke, fetcher, organizer, opera
 
 
 @pytest.mark.parametrize("singular", ["category", "tag", "tool"])
-async def test_empty_slug_fails_before_request(invoke, fetcher, singular):
-    with pytest.raises(ToolError):
-        await invoke(f"get_{singular}_by_slug", **{f"{singular}_slug": ""})
+@pytest.mark.parametrize(
+    "identifiers",
+    [
+        {},
+        {"id": None, "slug": None},
+        {"id": "record-1", "slug": "synthetic-slug"},
+        {"id": ""},
+        {"id": " \t\n"},
+        {"slug": ""},
+        {"slug": " \t\n"},
+        {"id": "", "slug": ""},
+        {"id": "record-1", "slug": ""},
+        {"id": "", "slug": "synthetic-slug"},
+        {"id": "record-1", "slug": "  "},
+        {"id": "  ", "slug": "synthetic-slug"},
+    ],
+)
+async def test_lookup_validation_fails_before_request(
+    invoke, fetcher, singular, identifiers
+):
+    with pytest.raises(ToolError, match="Provide exactly one nonempty"):
+        await invoke(
+            f"get_{singular}",
+            **{f"{singular}_{key}": value for key, value in identifiers.items()},
+        )
     assert fetcher.requests == []
+
+
+@pytest.mark.parametrize(
+    ("singular", "plural", "endpoint"), ORGANIZERS[:2] + ORGANIZERS[4:]
+)
+@pytest.mark.parametrize("identifier", ["id", "slug"])
+async def test_lookup_allows_explicit_null_alternative(
+    invoke, fetcher, singular, plural, endpoint, identifier
+):
+    url = f"{endpoint}/record-1" if identifier == "id" else f"{endpoint}/slug/record-1"
+    fetcher.responses["GET", url] = {
+        "id": "record-1", "name": "Synthetic", "slug": "record-1"
+    }
+    arguments = {f"{singular}_id": None, f"{singular}_slug": None}
+    arguments[f"{singular}_{identifier}"] = "record-1"
+    result = await invoke(f"get_{singular}", **arguments)
+    assert result == fetcher.responses["GET", url]
+    assert fetcher.last("GET")["url"] == url
+    assert len(fetcher.requests) == 1
+
+
+@pytest.mark.parametrize("singular", ["category", "tag", "tool"])
+@pytest.mark.parametrize("failure", ["client", "validation", "unexpected"])
+async def test_slug_failures_are_tool_errors_without_content_logs(
+    invoke, fetcher, singular, failure, monkeypatch, caplog
+):
+    secret = "synthetic-private-error"
+    if failure == "client":
+        fetcher.fail_on("/slug/", message=secret)
+    else:
+        def fail(*args, **kwargs):
+            error_type = ValueError if failure == "validation" else RuntimeError
+            raise error_type(secret)
+
+        monkeypatch.setattr(fetcher, "_handle_request", fail)
+    with caplog.at_level(logging.DEBUG, logger="mealie-mcp"):
+        with pytest.raises(ToolError) as error:
+            await invoke(f"get_{singular}", **{f"{singular}_slug": secret})
+    if failure == "client":
+        assert f"Error fetching {singular}" in str(error.value)
+        assert "HTTP 422" in str(error.value)
+        assert secret not in str(error.value)
+    assert secret not in caplog.text
+    assert "Traceback" not in caplog.text
 
 
 @pytest.mark.parametrize("operation", ["list", "create", "get", "update", "delete"])
@@ -187,7 +258,7 @@ async def test_success_logs_exclude_content(invoke, fetcher, organizer, caplog):
         )
         if singular in ("category", "tag", "tool"):
             await invoke(
-                f"get_{singular}_by_slug", **{f"{singular}_slug": secret}
+                f"get_{singular}", **{f"{singular}_slug": secret}
             )
         await invoke(f"delete_{singular}", **{f"{singular}_id": secret})
     assert caplog.records
@@ -344,9 +415,10 @@ async def test_registered_schemas_remain_explicit(server, organizer):
     if singular in ("category", "tag"):
         expected[f"get_empty_{plural}"] = (set(), set())
     if singular in ("category", "tag", "tool"):
-        expected[f"get_{singular}_by_slug"] = (
-            {f"{singular}_slug"}, {f"{singular}_slug"}
+        expected[f"get_{singular}"] = (
+            {f"{singular}_id", f"{singular}_slug"}, set()
         )
+        assert f"get_{singular}_by_slug" not in tools
     for name, (properties, required) in expected.items():
         schema = tools[name].inputSchema
         assert set(schema["properties"]) == properties

@@ -43,17 +43,18 @@ def register_parser_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     """Register the ingredient-parser tools with the MCP server."""
 
     @mcp.tool()
-    def parse_ingredient(
-        ingredient: str, parser: str = "nlp", verbose: bool = False
-    ) -> Dict[str, Any]:
-        """Resolve one free-text ingredient line against Mealie's vocabulary.
+    def parse_ingredients(
+        ingredients: List[str], parser: str = "nlp", verbose: bool = False
+    ) -> List[Dict[str, Any]]:
+        """Resolve one or more ingredient lines in a single call.
 
         Mealie's server-side parser turns "1/4 cup chopped onion" into
         quantity 0.25, the existing "cup" unit, the existing "onion" food, and
         the note "chopped" — in one call, instead of searching get_foods and
-        get_units per ingredient. Use parse_ingredients for a whole recipe.
+        get_units per ingredient. Pass a one-element list for a single line.
+        Results always come back as a list in input order, one per line.
 
-        The returned unit and food carry the ids create_recipe_full needs, so a
+        The returned unit and food carry the ids create_recipe needs, so a
         result can be passed straight through as a structured ingredient.
         A null unit or food means Mealie has no matching entry; create one with
         create_food or create_unit, or leave the text in the note.
@@ -62,33 +63,7 @@ def register_parser_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         against the source text before writing the recipe.
 
         Args:
-            ingredient: The ingredient line to parse, e.g. "1/4 cup chopped onion".
-            parser: Parser backend — "nlp" (default, trained model), "brute"
-                (regex splitting, better for terse or unusual formats), or
-                "openai" (only if the Mealie server is configured for it).
-            verbose: If True, return Mealie's untouched response, including the
-                full food/unit records and the per-field confidence breakdown.
-
-        Returns:
-            Dict[str, Any]: input, confidence, quantity, unit, food, and note.
-        """
-        with tool_error_boundary("Error parsing ingredient"):
-            _validate_parser(parser)
-            parsed = mealie.parse_ingredient(ingredient, parser=parser)
-            return parsed if verbose else _flatten(parsed)
-
-    @mcp.tool()
-    def parse_ingredients(
-        ingredients: List[str], parser: str = "nlp", verbose: bool = False
-    ) -> List[Dict[str, Any]]:
-        """Resolve a whole recipe's ingredient lines in a single call.
-
-        Same parser as parse_ingredient, batched — the efficient way to prepare
-        ingredients before create_recipe_full or update_recipe. Results come
-        back in input order, one per line.
-
-        Args:
-            ingredients: The ingredient lines to parse, in recipe order.
+            ingredients: Nonempty ingredient lines to parse, in recipe order.
             parser: Parser backend — "nlp" (default, trained model), "brute"
                 (regex splitting, better for terse or unusual formats), or
                 "openai" (only if the Mealie server is configured for it).
@@ -101,5 +76,7 @@ def register_parser_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         """
         with tool_error_boundary("Error parsing ingredients"):
             _validate_parser(parser)
+            if any(not ingredient.strip() for ingredient in ingredients):
+                raise ValueError("Ingredient cannot be empty")
             parsed = mealie.parse_ingredients(ingredients, parser=parser)
             return parsed if verbose else [_flatten(p) for p in parsed]

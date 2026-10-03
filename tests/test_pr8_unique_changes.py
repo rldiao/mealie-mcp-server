@@ -23,22 +23,22 @@ async def test_update_shopping_list_preserves_required_fields(invoke, fetcher):
 
 
 async def test_set_and_clear_recipe_categories(invoke, fetcher):
-    await invoke("set_recipe_categories", slug="recipe", category_ids=["cat-1"])
+    await invoke("update_recipe_categories_and_tags", slug="recipe", category_ids=["cat-1"])
     body = fetcher.last("PATCH", "/api/recipes/recipe")["json"]
     assert body["recipeCategory"][0]["id"] == "cat-1"
 
-    await invoke("set_recipe_categories", slug="recipe", category_ids=[])
+    await invoke("update_recipe_categories_and_tags", slug="recipe", category_ids=[])
     assert fetcher.last("PATCH", "/api/recipes/recipe")["json"] == {
         "recipeCategory": []
     }
 
 
 async def test_set_and_clear_recipe_tags(invoke, fetcher):
-    await invoke("set_recipe_tags", slug="recipe", tag_ids=["tag-1"])
+    await invoke("update_recipe_categories_and_tags", slug="recipe", tag_ids=["tag-1"])
     body = fetcher.last("PATCH", "/api/recipes/recipe")["json"]
     assert body["tags"][0]["id"] == "tag-1"
 
-    await invoke("set_recipe_tags", slug="recipe", tag_ids=[])
+    await invoke("update_recipe_categories_and_tags", slug="recipe", tag_ids=[])
     assert fetcher.last("PATCH", "/api/recipes/recipe")["json"] == {"tags": []}
 
 

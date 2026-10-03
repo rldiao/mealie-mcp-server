@@ -18,7 +18,7 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         """List the household's recipe tools, optionally filtered by a search term.
 
         Use this to resolve a tool id+name before assigning it to a recipe via
-        create_recipe_full or patch_recipe. Each item includes
+        create_recipe or update_recipe. Each item includes
         ``householdsWithTool``, a list of household IDs. A household owns the
         tool only if its ID appears in that list; a non-empty list alone does
         not establish ownership by the current household.
@@ -48,29 +48,28 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             return mealie.create_tool(name)
 
     @mcp.tool()
-    def get_tool(tool_id: str) -> Dict[str, Any]:
-        """Get a specific tool by ID.
+    def get_tool(
+        tool_id: Optional[str] = None,
+        tool_slug: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Get a specific tool by ID or slug. Provide exactly one nonempty identifier.
 
         Args:
             tool_id: The UUID of the tool.
-
-        Returns:
-            Dict[str, Any]: The tool details.
-        """
-        with tool_error_boundary("Error fetching tool"):
-            return mealie.get_tool(tool_id)
-
-    @mcp.tool()
-    def get_tool_by_slug(tool_slug: str) -> Dict[str, Any]:
-        """Get a specific tool by its slug.
-
-        Args:
             tool_slug: The slug of the tool (e.g. "kochtopf").
 
         Returns:
             Dict[str, Any]: The tool details.
         """
-        with tool_error_boundary("Error fetching tool by slug"):
+        with tool_error_boundary("Error fetching tool"):
+            if (
+                (tool_id is None) == (tool_slug is None)
+                or (tool_id is not None and not tool_id.strip())
+                or (tool_slug is not None and not tool_slug.strip())
+            ):
+                raise ValueError("Provide exactly one nonempty tool_id or tool_slug")
+            if tool_id is not None:
+                return mealie.get_tool(tool_id)
             return mealie.get_tool_by_slug(tool_slug)
 
     @mcp.tool()

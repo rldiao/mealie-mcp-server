@@ -201,24 +201,19 @@ services:
 
 ## 🎯 Available Tools
 
-### Recipe Tools (17 operations)
+### Recipe Tools (12 operations)
 
 - `get_recipes` - List/search recipes with advanced filtering
-- `get_recipe_detailed` - Get complete recipe details
-- `get_recipe_concise` - Get recipe summary
-- `create_recipe` - Create new recipe (flat or structured ingredients)
-- `create_recipe_full` - Create a recipe with full content (including nutrition and display settings) in one call
+- `get_recipe` - Get complete recipe details, or a summary with `concise=true`
+- `create_recipe` - Create a recipe in one call; only the name is required, with optional flat or structured ingredients, instructions, metadata, nutrition, and display settings
 - `import_recipe_from_url` - Import a recipe from a web page
-- `update_recipe` - Update recipe (full replacement)
-- `patch_recipe` - Update specific fields only (including nutrition and display settings)
+- `update_recipe` - Update provided content or metadata fields (including nutrition and display settings); omitted fields are preserved, and empty lists clear content
 - `duplicate_recipe` - Clone a recipe
 - `mark_recipe_last_made` - Update last made timestamp
 - `set_recipe_image_from_url` - Set image from URL
 - `upload_recipe_image_file` - Upload image file
 - `upload_recipe_asset_file` - Upload document/asset
-- `set_recipe_categories` - Replace or clear recipe categories
-- `set_recipe_tags` - Replace or clear recipe tags
-- `update_recipe_categories_and_tags` - Update both organizers together
+- `update_recipe_categories_and_tags` - Replace or clear categories, tags, or both using IDs
 - `delete_recipe` - Delete recipe
 
 ### Shopping List Tools (15 operations)
@@ -239,23 +234,21 @@ services:
 - `delete_shopping_list_item` - Delete single item
 - `delete_shopping_list_items_bulk` - Delete multiple items
 
-### Category Tools (7 operations)
+### Category Tools (6 operations)
 
 - `get_categories` - List/search categories
 - `get_empty_categories` - Find unused categories
 - `create_category` - Create new category
-- `get_category` - Get by ID
-- `get_category_by_slug` - Get by slug
+- `get_category` - Get by exactly one of `category_id` or `category_slug`
 - `update_category` - Update category
 - `delete_category` - Delete category
 
-### Tag Tools (7 operations)
+### Tag Tools (6 operations)
 
 - `get_tags` - List/search tags
 - `get_empty_tags` - Find unused tags
 - `create_tag` - Create new tag
-- `get_tag` - Get by ID
-- `get_tag_by_slug` - Get by slug
+- `get_tag` - Get by exactly one of `tag_id` or `tag_slug`
 - `update_tag` - Update tag
 - `delete_tag` - Delete tag
 
@@ -273,18 +266,16 @@ services:
 - `update_unit` - Update unit
 - `delete_unit` - Delete unit
 
-### Recipe Tool Tools (6 operations)
+### Recipe Tool Tools (5 operations)
 - `get_tools` - List/search recipe tools (includes `householdsWithTool`)
 - `create_tool` - Create a new tool
-- `get_tool` - Get by ID
-- `get_tool_by_slug` - Get by slug
+- `get_tool` - Get by exactly one of `tool_id` or `tool_slug`
 - `update_tool` - Update tool
 - `delete_tool` - Delete tool
 
-### Parser Tools (2 operations)
+### Parser Tools (1 operation)
 
-- `parse_ingredient` - Resolve one free-text ingredient line
-- `parse_ingredients` - Resolve a whole recipe's ingredients in one request
+- `parse_ingredients` - Resolve one or more ingredient lines in one request; always returns a list
 
 ### Meal Plan Tools (6 operations)
 
@@ -295,7 +286,35 @@ services:
 - `delete_mealplan` - Delete an entry
 - `get_todays_mealplan` - Get today's meals
 
-**Total: 70 tools** providing comprehensive Mealie API coverage
+**Total: 61 tools** providing comprehensive Mealie API coverage
+
+### Migrating consolidated tools (breaking change)
+
+Redundant MCP names have been removed, not retained as aliases. Refresh your
+client's tool list and update saved calls:
+
+| Removed tool | Replacement |
+| --- | --- |
+| `create_recipe_full` | `create_recipe` with the same arguments |
+| `get_recipe_detailed` | `get_recipe` (full details by default) |
+| `get_recipe_concise` | `get_recipe` with `concise=true` |
+| `patch_recipe` | `update_recipe` with the same arguments |
+| `set_recipe_categories` | `update_recipe_categories_and_tags` with `category_ids` |
+| `set_recipe_tags` | `update_recipe_categories_and_tags` with `tag_ids` |
+| `get_category_by_slug` | `get_category` with `category_slug` |
+| `get_tag_by_slug` | `get_tag` with `tag_slug` |
+| `get_tool_by_slug` | `get_tool` with `tool_slug` |
+| `parse_ingredient` | `parse_ingredients(ingredients=[...])`; read the first result |
+
+Existing `create_recipe` and `update_recipe` calls remain supported. Recipe
+updates can now combine content and metadata, with omitted or null fields left
+unchanged. Ingredient and instruction lists replace only the provided fields.
+Nutrition remains a whole-object replacement, while settings are merged.
+
+Distinct operations remain separate: single and bulk writes have different
+response/failure contracts; paginated lists differ from individual lookups,
+unused-organizer queries, and today's meal plans. Recipe URL import, image URL
+scraping, and file uploads also perform different operations.
 
 ## 🔧 Development
 
@@ -385,19 +404,19 @@ Use `get_tags()` or `get_categories()` first to find the correct slugs.
 
 ### Nutrition Is Replaced, Not Merged
 
-Mealie replaces the whole `nutrition` object on write. `patch_recipe` follows
+Mealie replaces the whole `nutrition` object on write. `update_recipe` follows
 suit, so pass every value you want to keep:
 
 ```
 # clears every nutrition value except fat
-patch_recipe(slug="...", nutrition={"fatContent": "12"})
+update_recipe(slug="...", nutrition={"fatContent": "12"})
 ```
 
 ### Parsing Ingredients in Bulk
 
 Resolving ingredients by hand costs one to two `get_foods` / `get_units` calls
 each. `parse_ingredients` does a whole recipe in one request and returns results
-that can be handed straight to `create_recipe_full`:
+that can be handed straight to `create_recipe`:
 
 ```
 parse_ingredients(ingredients=["1/4 cup chopped onion", "2 large eggs"])
@@ -418,7 +437,7 @@ A recipe's `settings` object controls what the UI renders. `showAssets` and
 invisible in the web UI. Flip the toggle with:
 
 ```
-patch_recipe(slug="...", settings={"showAssets": True})
+update_recipe(slug="...", settings={"showAssets": True})
 ```
 
 Mealie seeds a new recipe's settings from the household preferences

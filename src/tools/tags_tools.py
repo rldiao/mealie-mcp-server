@@ -50,29 +50,28 @@ def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             return mealie.create_tag(name)
 
     @mcp.tool()
-    def get_tag(tag_id: str) -> Dict[str, Any]:
-        """Get a specific tag by ID.
+    def get_tag(
+        tag_id: Optional[str] = None,
+        tag_slug: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Get a specific tag by ID or slug. Provide exactly one nonempty identifier.
 
         Args:
             tag_id: The UUID of the tag
-
-        Returns:
-            Dict[str, Any]: The tag details including associated recipes
-        """
-        with tool_error_boundary("Error fetching tag"):
-            return mealie.get_tag(tag_id)
-
-    @mcp.tool()
-    def get_tag_by_slug(tag_slug: str) -> Dict[str, Any]:
-        """Get a specific tag by its slug.
-
-        Args:
             tag_slug: The slug of the tag (e.g., "quick", "healthy")
 
         Returns:
             Dict[str, Any]: The tag details including associated recipes
         """
-        with tool_error_boundary("Error fetching tag by slug"):
+        with tool_error_boundary("Error fetching tag"):
+            if (
+                (tag_id is None) == (tag_slug is None)
+                or (tag_id is not None and not tag_id.strip())
+                or (tag_slug is not None and not tag_slug.strip())
+            ):
+                raise ValueError("Provide exactly one nonempty tag_id or tag_slug")
+            if tag_id is not None:
+                return mealie.get_tag(tag_id)
             return mealie.get_tag_by_slug(tag_slug)
 
     @mcp.tool()

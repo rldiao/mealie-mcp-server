@@ -266,35 +266,22 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             )
 
     @mcp.tool()
-    def get_recipe_detailed(slug: str) -> Dict[str, Any]:
-        """Retrieve a specific recipe by its slug identifier. Use this when to get full recipe
-        details for tasks like updating or displaying the recipe.
+    def get_recipe(slug: str, concise: bool = False) -> Dict[str, Any]:
+        """Retrieve a recipe, optionally returning only a concise summary.
 
         Args:
             slug: The unique text identifier for the recipe, typically found in recipe URLs
                 or from get_recipes results.
+            concise: Return essential fields for meal planning instead of full
+                ingredients, instructions, nutrition, notes, and metadata.
 
         Returns:
-            Dict[str, Any]: Comprehensive recipe details including ingredients, instructions,
-                nutrition information, notes, and associated metadata.
-        """
-        with tool_error_boundary("Error fetching recipe"):
-            return mealie.get_recipe(slug)
-
-    @mcp.tool()
-    def get_recipe_concise(slug: str) -> Dict[str, Any]:
-        """Retrieve a concise version of a specific recipe by its slug identifier. Use this when you only
-        need a summary of the recipe, such as for when mealplaning.
-
-        Args:
-            slug: The unique text identifier for the recipe, typically found in recipe URLs
-                or from get_recipes results.
-
-        Returns:
-            Dict[str, Any]: Concise recipe summary with essential fields.
+            Dict[str, Any]: Full recipe details by default, or a concise summary.
         """
         with tool_error_boundary("Error fetching recipe"):
             recipe_json = mealie.get_recipe(slug)
+            if not concise:
+                return recipe_json
             recipe = Recipe.model_validate(recipe_json)
             return recipe.model_dump(
                 include={
@@ -313,43 +300,6 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 },
                 exclude_none=True,
             )
-
-    @mcp.tool()
-    def create_recipe(
-        name: str,
-        ingredients: List[Union[str, RecipeIngredientInput]],
-        instructions: List[Union[str, RecipeInstructionInput]],
-    ) -> Dict[str, Any]:
-        """Create a new recipe.
-
-        Ingredients and instructions each accept either a plain string or a
-        structured object:
-
-        - An ingredient string (e.g. "200 g basmati rice") is resolved by
-          Mealie's natural-language parser into quantity/unit/food.
-        - An ingredient object can set quantity, note, title, an existing
-          Mealie unit/food (by id and name), and a referenceId for step links.
-        - An instruction string is the step text; an instruction object can
-          also carry a summary (heading shown in place of "Step N"), a title
-          (section banner above the step), and ingredientReferences for
-          cook-mode highlights.
-
-        Args:
-            name: The name of the new recipe to be created.
-            ingredients: Ingredient strings and/or structured ingredient objects.
-            instructions: Instruction strings and/or structured instruction objects.
-
-        Returns:
-            Dict[str, Any]: The created recipe details.
-
-        If a later API step fails, the error includes created_slug and stage.
-        Inspect that recipe and resume the failed step instead of creating again.
-        """
-        with tool_error_boundary("Error creating recipe"):
-            changes = _recipe_changes(
-                ingredients=ingredients, instructions=instructions
-            )
-            return _create_populated_recipe(mealie, name, changes)
 
     @mcp.tool()
     def import_recipe_from_url(
@@ -387,33 +337,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 return mealie.get_recipe(slug)
 
     @mcp.tool()
-    def update_recipe(
-        slug: str,
-        ingredients: List[Union[str, RecipeIngredientInput]],
-        instructions: List[Union[str, RecipeInstructionInput]],
-    ) -> Dict[str, Any]:
-        """Replaces the ingredients and instructions of an existing recipe.
-
-        Ingredients and instructions accept the same flat-string or structured
-        forms as create_recipe.
-
-        Args:
-            slug: The unique text identifier for the recipe to be updated.
-            ingredients: Ingredient strings and/or structured ingredient objects.
-            instructions: Instruction strings and/or structured instruction objects.
-
-        Returns:
-            Dict[str, Any]: The updated recipe details.
-        """
-        with tool_error_boundary("Error updating recipe"):
-            changes = _recipe_changes(
-                ingredients=ingredients, instructions=instructions
-            )
-            current = mealie.get_recipe(slug)
-            return mealie.update_recipe(slug, _compose_recipe(current, changes))
-
-    @mcp.tool()
-    def create_recipe_full(
+    def create_recipe(
         name: str,
         description: Optional[str] = None,
         org_url: Optional[str] = None,
@@ -433,14 +357,22 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     ) -> Dict[str, Any]:
         """Create a recipe and populate all of its content in one call.
 
-        Use this instead of create_recipe when you already have complete
-        recipe data (description, timing, servings, source URL, ingredients,
-        steps, and optionally an image URL). It creates the recipe, fills in
-        every provided field, and sets the image by scraping image_url when
-        given.
+        Only name is required. Provide ingredients and instructions for a basic
+        recipe, or include metadata, nutrition, and display settings for a
+        complete recipe. Omitted or null fields keep Mealie's defaults; empty
+        lists clear those fields. An image_url is scraped after content is saved.
 
-        Ingredients and instructions accept the same flat-string or structured
-        forms as create_recipe.
+        Ingredients and instructions each accept either a plain string or a
+        structured object:
+
+        - An ingredient string (e.g. "200 g basmati rice") is resolved by
+          Mealie's natural-language parser into quantity/unit/food.
+        - An ingredient object can set quantity, note, title, an existing
+          Mealie unit/food (by id and name), and a referenceId for step links.
+        - An instruction string is the step text; an instruction object can
+          also carry a summary (heading shown in place of "Step N"), a title
+          (section banner above the step), and ingredientReferences for
+          cook-mode highlights.
 
         Args:
             name: The name of the new recipe.
@@ -470,7 +402,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         If a later API step fails, the error includes created_slug and stage.
         Inspect that recipe and resume the failed step instead of creating again.
         """
-        with tool_error_boundary("Error creating full recipe"):
+        with tool_error_boundary("Error creating recipe"):
             changes = _recipe_changes(
                 description=description,
                 org_url=org_url,
@@ -490,7 +422,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             return _create_populated_recipe(mealie, name, changes, image_url)
 
     @mcp.tool()
-    def patch_recipe(
+    def update_recipe(
         slug: str,
         name: Optional[str] = None,
         description: Optional[str] = None,
@@ -505,8 +437,15 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         tools: Optional[List[OrganizerRef]] = None,
         nutrition: Optional[RecipeNutrition] = None,
         settings: Optional[RecipeSettingsInput] = None,
+        ingredients: Optional[List[Union[str, RecipeIngredientInput]]] = None,
+        instructions: Optional[List[Union[str, RecipeInstructionInput]]] = None,
     ) -> Dict[str, Any]:
         """Partially update a recipe (only updates provided fields).
+
+        Omitted or null fields are unchanged. Provided ingredient/instruction
+        lists replace those fields; empty lists clear them. Content changes use
+        a read-merge-write to preserve other recipe fields; metadata-only changes
+        use PATCH.
 
         Args:
             slug: The unique text identifier for the recipe to be updated.
@@ -530,11 +469,15 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 stored nutrition. Only the toggles you pass are changed: the
                 current settings are read first and merged, because Mealie does
                 not reliably preserve toggles left out of a settings PATCH.
+            ingredients: Ingredient strings and/or structured objects, as in
+                create_recipe. Replaces the ingredient list when provided.
+            instructions: Step strings and/or structured objects, as in
+                create_recipe. Replaces the instruction list when provided.
 
         Returns:
             Dict[str, Any]: The updated recipe details.
         """
-        with tool_error_boundary("Error patching recipe"):
+        with tool_error_boundary("Error updating recipe"):
             recipe_data = _recipe_changes(
                 name=name,
                 description=description,
@@ -549,7 +492,16 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 tools=tools,
                 nutrition=nutrition,
                 settings=settings,
+                ingredients=ingredients,
+                instructions=instructions,
             )
+            if not recipe_data:
+                raise ValueError("At least one field must be provided to update")
+            if ingredients is not None or instructions is not None:
+                current = mealie.get_recipe(slug)
+                return mealie.update_recipe(
+                    slug, _compose_recipe(current, recipe_data)
+                )
             if settings is not None:
                 # Mealie drops some toggles omitted from a settings PATCH, so
                 # send the complete object built from the recipe's current one
@@ -558,9 +510,6 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                     **current,
                     **settings.model_dump(exclude_none=True),
                 }
-
-            if not recipe_data:
-                raise ValueError("At least one field must be provided to update")
 
             return mealie.patch_recipe(slug, recipe_data)
 
@@ -664,38 +613,6 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             return mealie.upload_recipe_asset(
                 slug, asset_data, filename, name=name, icon=icon, extension=extension
             )
-
-    @mcp.tool()
-    def set_recipe_categories(slug: str, category_ids: List[str]) -> Dict[str, Any]:
-        """Set the categories for a recipe, replacing any existing categories.
-        Use get_categories() first to find valid category IDs.
-        Passing an empty list will remove all categories from the recipe.
-
-        Args:
-            slug: The unique text identifier for the recipe.
-            category_ids: List of category UUIDs to assign.
-
-        Returns:
-            Dict[str, Any]: The updated recipe details.
-        """
-        with tool_error_boundary("Error setting recipe categories"):
-            return mealie.set_recipe_categories(slug, category_ids)
-
-    @mcp.tool()
-    def set_recipe_tags(slug: str, tag_ids: List[str]) -> Dict[str, Any]:
-        """Set the tags for a recipe, replacing any existing tags.
-        Use get_tags() first to find valid tag IDs.
-        Passing an empty list will remove all tags from the recipe.
-
-        Args:
-            slug: The unique text identifier for the recipe.
-            tag_ids: List of tag UUIDs to assign.
-
-        Returns:
-            Dict[str, Any]: The updated recipe details.
-        """
-        with tool_error_boundary("Error setting recipe tags"):
-            return mealie.set_recipe_tags(slug, tag_ids)
 
     @mcp.tool()
     def update_recipe_categories_and_tags(
