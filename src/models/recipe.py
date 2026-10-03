@@ -97,6 +97,51 @@ class RecipeNutrition(BaseModel):
     )
 
 
+class RecipeSettingsInput(BaseModel):
+    """Display toggles accepted by the create/update recipe tools.
+
+    Every field is optional: only the toggles you pass are changed, the rest
+    keep their current value. Mealie seeds a new recipe's settings from the
+    household preferences (`recipeShowAssets`, `recipeShowNutrition`, and
+    friends), so the defaults differ per instance.
+    """
+
+    public: Optional[bool] = Field(
+        default=None,
+        description="Make the recipe readable without logging in.",
+    )
+    showNutrition: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Render the nutrition card. Nutrition values are stored either way, "
+            "but stay hidden in the UI while this is false."
+        ),
+    )
+    showAssets: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Render the assets card. Uploaded assets are stored either way, but "
+            "stay hidden in the UI while this is false."
+        ),
+    )
+    landscapeView: Optional[bool] = Field(
+        default=None, description="Use the landscape recipe layout."
+    )
+    disableComments: Optional[bool] = Field(
+        default=None, description="Hide the comments section."
+    )
+    disableAmount: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Hide ingredient quantities and units. Not present on every Mealie "
+            "version; ignored where absent."
+        ),
+    )
+    locked: Optional[bool] = Field(
+        default=None, description="Prevent other users from editing the recipe."
+    )
+
+
 class RecipeSettings(BaseModel):
     public: bool = False
     showNutrition: bool = False

@@ -15,6 +15,7 @@ A comprehensive Model Context Protocol (MCP) server that enables AI assistants t
 - **Metadata Tracking**: Mark recipes as made, track last made dates
 - **Nutrition**: Set per-serving nutrition when creating or patching a recipe
 - **Ingredient Parsing**: Resolve free-text ingredients against your food and unit vocabulary
+- **Display Settings**: Control per-recipe visibility toggles such as showAssets and showNutrition
 
 ### 🛒 Shopping Lists
 
@@ -124,9 +125,9 @@ Restart Claude Desktop to load the server.
 - `get_recipe_detailed` - Get complete recipe details
 - `get_recipe_concise` - Get recipe summary
 - `create_recipe` - Create new recipe (flat or structured ingredients)
-- `create_recipe_full` - Create a recipe with full content (including nutrition) in one call
+- `create_recipe_full` - Create a recipe with full content (including nutrition and display settings) in one call
 - `update_recipe` - Update recipe (full replacement)
-- `patch_recipe` - Update specific fields only (including nutrition)
+- `patch_recipe` - Update specific fields only (including nutrition and display settings)
 - `duplicate_recipe` - Clone a recipe
 - `mark_recipe_last_made` - Update last made timestamp
 - `set_recipe_image_from_url` - Set image from URL
@@ -312,6 +313,25 @@ parse_ingredients(ingredients=["1/4 cup chopped onion", "2 large eggs"])
 A `null` unit or food means your instance has no matching entry — create one
 with `create_food` / `create_unit`, or leave the text in the note. Pass
 `verbose=True` for Mealie's full response including per-field confidences.
+
+### Uploaded Assets and Nutrition Can Be Stored but Hidden
+
+A recipe's `settings` object controls what the UI renders. `showAssets` and
+`showNutrition` gate the assets and nutrition cards, so an asset uploaded with
+`upload_recipe_asset_file` can be present in the API response and still be
+invisible in the web UI. Flip the toggle with:
+
+```
+patch_recipe(slug="...", settings={"showAssets": True})
+```
+
+Mealie seeds a new recipe's settings from the household preferences
+(`recipeShowAssets`, `recipeShowNutrition`, ...), so the defaults differ per
+instance — check rather than assume.
+
+Only the toggles you pass are changed. The tool reads the recipe's current
+settings and sends the merged object, because Mealie does not reliably preserve
+toggles omitted from a settings PATCH.
 
 ### Field Preservation
 

@@ -279,3 +279,78 @@ async def test_upload_recipe_asset_rejects_missing_file(invoke, fetcher, tmp_pat
             asset_path=str(tmp_path / "nope.pdf"),
         )
     assert fetcher.last("POST", "/assets") is None
+
+
+async def test_patch_recipe_merges_settings_onto_current(invoke, fetcher):
+    await invoke("patch_recipe", slug="test-recipe", settings={"showAssets": False})
+
+    body = fetcher.last("PATCH", "/api/recipes/")["json"]
+    # Mealie drops toggles omitted from a settings PATCH, so the tool reads the
+    # current object and sends it whole -- locked must survive untouched.
+    assert body["settings"] == {
+        "public": False,
+        "showNutrition": True,
+        "showAssets": False,
+        "landscapeView": False,
+        "disableComments": False,
+        "locked": True,
+    }
+
+
+async def test_patch_recipe_settings_reads_current_first(invoke, fetcher):
+    await invoke("patch_recipe", slug="test-recipe", settings={"public": True})
+
+    # the merge needs the existing settings, so a GET precedes the PATCH
+    methods = [r["method"] for r in fetcher.requests]
+    assert methods == ["GET", "PATCH"]
+
+
+async def test_patch_recipe_without_settings_issues_no_extra_get(invoke, fetcher):
+    await invoke("patch_recipe", slug="test-recipe", description="Just a description")
+
+    assert [r["method"] for r in fetcher.requests] == ["PATCH"]
+    assert "settings" not in fetcher.last("PATCH", "/api/recipes/")["json"]
+
+
+async def test_create_recipe_full_merges_settings_onto_seeded(invoke, fetcher):
+    await invoke(
+        "create_recipe_full", name="Visible", settings={"showAssets": True}
+    )
+
+    body = fetcher.last("PUT", "/api/recipes/")["json"]
+    assert body["settings"]["showAssets"] is True
+    # the toggles Mealie seeded are preserved rather than reset to model defaults
+    assert body["settings"]["locked"] is True
+    assert body["settings"]["showNutrition"] is True
+
+
+async def test_create_recipe_full_without_settings_preserves_seeded(invoke, fetcher):
+    await invoke("create_recipe_full", name="Plain")
+
+    body = fetcher.last("PUT", "/api/recipes/")["json"]
+    assert body["settings"]["locked"] is True
+    assert body["settings"]["showAssets"] is True
+
+
+@pytest.mark.parametrize(
+    "tool_name,arguments,method",
+    [
+        ("create_recipe_full", {"name": "Combined recipe"}, "PUT"),
+        ("patch_recipe", {"slug": "test-recipe"}, "PATCH"),
+    ],
+)
+async def test_nutrition_and_settings_can_be_set_together(
+    invoke, fetcher, tool_name, arguments, method
+):
+    await invoke(
+        tool_name,
+        **arguments,
+        nutrition={"calories": 450, "proteinContent": 20},
+        settings={"showNutrition": False},
+    )
+
+    body = fetcher.last(method, "/api/recipes/")["json"]
+    assert body["nutrition"] == {"calories": "450", "proteinContent": "20"}
+    assert body["settings"]["showNutrition"] is False
+    assert body["settings"]["locked"] is True
+    assert body["settings"]["showAssets"] is True

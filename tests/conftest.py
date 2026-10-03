@@ -30,6 +30,16 @@ BASE_RECIPE = {
     "dateUpdated": "2024-01-01T00:00:00",
     "createdAt": "2024-01-01T00:00:00",
     "updatedAt": "2024-01-01T00:00:00",
+    # Mealie seeds these from the household preferences, so a fresh recipe does
+    # not necessarily start all-false.
+    "settings": {
+        "public": False,
+        "showNutrition": True,
+        "showAssets": True,
+        "landscapeView": False,
+        "disableComments": False,
+        "locked": True,
+    },
 }
 
 
