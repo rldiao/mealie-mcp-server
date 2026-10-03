@@ -28,5 +28,5 @@
 ## Imports and startup
 
 - Source is packaged from `src/` using Hatchling; keep imports compatible with both `uv run src/server.py` and the `mealie-mcp-server` entry point.
-- Importing `server.py` reads environment variables and establishes the Mealie client. Unit tests should normally test mixins and registration without importing the server module.
-
+- Importing `server.py` exports a discoverable `mcp` instance without reading Mealie configuration or opening an HTTP client. Configuration is loaded at runtime; FastMCP lifespans own client initialization and cleanup.
+- HTTP application lifespans must hold the client across MCP sessions and fail startup on unsuccessful health checks. Preserve the outer HTTP owner when changing the SDK's per-session lifespan wiring.
