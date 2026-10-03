@@ -4,7 +4,7 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## Unreleased
 
 ### Changed
 
@@ -31,10 +31,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `create_recipe` and `update_recipe` accept a `nutrition` argument covering
   Mealie's full key set (calories, macros, cholesterol, sodium, sugars, and the
   fat breakdown). Numbers are converted to the strings Mealie stores. Mealie
-  replaces the whole nutrition object on write, so `update_recipe` clears any key
-  not passed.
-- `parse_ingredients` wraps Mealie's server-side
-  ingredient parser, resolving free text such as `"1/4 cup chopped onion"`
+  replaces the whole nutrition object on write, so when `nutrition` is supplied,
+  `update_recipe` clears nutrition keys not included in that object.
+- `parse_ingredients` wraps Mealie's server-side ingredient parser, resolving
+  free text such as `"1/4 cup chopped onion"`
   against the instance's food and unit vocabulary in one request instead of
   searching `get_foods` and `get_units` per ingredient. Results are flattened to
   `{input, confidence, quantity, unit, food, note}` and can be passed straight
@@ -48,8 +48,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- Assets and nutrition could be written but not seen. `showAssets` and
-  `showNutrition` gate the corresponding UI cards, and nothing in the server
-  could read or write them, so an asset uploaded through
-  `upload_recipe_asset_file` was present in the API response yet invisible in
-  the Mealie UI whenever the household default left the toggle off.
+- Recipes now expose `showAssets` and `showNutrition` through their settings.
+  Previously, uploaded assets and nutrition could be stored but hidden in the
+  Mealie UI when household defaults disabled those cards.

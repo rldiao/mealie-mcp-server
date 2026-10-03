@@ -1,48 +1,47 @@
-[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/rldiao-mealie-mcp-server-badge.png)](https://mseep.ai/app/rldiao-mealie-mcp-server)
-
 # Mealie MCP Server
 
-A comprehensive Model Context Protocol (MCP) server that enables AI assistants to interact with your [Mealie](https://github.com/mealie-recipes/mealie) recipe database through clients like Claude Desktop.
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/rldiao-mealie-mcp-server-badge.png)](https://mseep.ai/app/rldiao-mealie-mcp-server)
 
-## ✨ Features
+A Model Context Protocol (MCP) server that connects AI assistants to your
+[Mealie](https://github.com/mealie-recipes/mealie) recipe database through clients
+such as Claude Desktop.
 
-### 🍽️ Recipe Management
+## Contents
 
-- **CRUD Operations**: Create, read, update, patch, duplicate, and delete recipes
-- **Advanced Search**: Filter by text, categories, tags, and tools with AND/OR logic
-- **Image Management**: Upload images or scrape from URLs
-- **Asset Uploads**: Attach documents and files to recipes
-- **Metadata Tracking**: Mark recipes as made, track last made dates
-- **Nutrition**: Set per-serving nutrition when creating or patching a recipe
-- **Ingredient Parsing**: Resolve free-text ingredients against your food and unit vocabulary
-- **Display Settings**: Control per-recipe visibility toggles such as showAssets and showNutrition
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Remote Access](#remote-access)
+- [Docker](#docker)
+- [Usage Examples](#usage-examples)
+- [Available Tools](#available-tools)
+- [Development](#development)
+- [Important Notes](#important-notes)
+- [Support and Contributing](#support-and-contributing)
+- [License and Credits](#license-and-credits)
 
-### 🛒 Shopping Lists
+## Features
 
-- **List Management**: Create, update, and delete shopping lists
-- **Item Operations**: Add, update, check off, and remove items
-- **Bulk Operations**: Create, update, or delete multiple items at once
-- **Recipe Integration**: Automatically add recipe ingredients to shopping lists
+- **Recipes:** Create, read, update, import, duplicate, and delete recipes.
+- **Search:** Filter by text, categories, tags, and tools with AND/OR logic.
+- **Images and assets:** Upload recipe images and files, or set images from URLs.
+- **Nutrition and display:** Set per-serving nutrition and recipe visibility
+  settings such as `showAssets` and `showNutrition`.
+- **Ingredients:** Resolve free-text ingredients against Mealie's food and unit
+  vocabulary.
+- **Shopping lists:** Manage lists and items, perform bulk operations, and add
+  recipe ingredients with quantity scaling.
+- **Organization:** Manage categories, tags, foods, units, and recipe tools; find
+  unused categories and tags.
+- **Meal planning:** View, create, update, and delete meal plan entries, create
+  multiple entries, and mark recipes as made today.
 
-### 🏷️ Organization
-
-- **Categories**: Organize recipes with categories (Breakfast, Dinner, etc.)
-- **Tags**: Tag recipes for easy filtering (Quick, Healthy, Family Favorite)
-- **Advanced Filtering**: Search and filter with full pagination support
-- **Empty Detection**: Find unused categories and tags
-
-### 📅 Meal Planning
-
-- **Meal Plans**: View and manage meal plans
-- **Bulk Creation**: Add multiple meals at once
-- **Today's Menu**: Quick access to today's planned meals
-
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
 - Python 3.12+
-- Running Mealie instance with API key
+- A running Mealie instance and an API key from your account settings
 - Package manager [uv](https://docs.astral.sh/uv/getting-started/installation/)
 
 ### Installation
@@ -64,7 +63,8 @@ uv run mcp install src/server.py --with-editable . \
 
 #### Option 2: Using uvx
 
-Run directly from GitHub without cloning:
+Add this to your MCP client's configuration to run directly from GitHub without
+cloning (in Claude Desktop, use `claude_desktop_config.json`):
 
 ```json
 {
@@ -87,36 +87,43 @@ Run directly from GitHub without cloning:
 
 Restart Claude Desktop to load the server.
 
-## 🌐 Remote Access (HTTP Transport)
+## Configuration
 
-By default, the server runs over stdio, which works for local clients like Claude Desktop. To make it reachable remotely (e.g. from claude.ai custom connectors, or multiple devices), run it with the streamable-http transport instead.
+Set environment variables in your MCP client configuration or shell. For a local
+checkout, you can also copy [`.env.template`](.env.template) to `.env` and fill in
+your instance details. Never commit your API key.
 
-### Configuration
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MEALIE_BASE_URL` | Required | Mealie base URL, including protocol and port if needed |
+| `MEALIE_API_KEY` | Required | API key from your Mealie account settings |
+| `MCP_TRANSPORT` | `stdio` | `stdio`, `streamable-http`, or legacy `sse` |
+| `MCP_HOST` | `127.0.0.1` | HTTP bind address; use `0.0.0.0` in containers |
+| `MCP_PORT` | `8765` | HTTP port, from 1 to 65535 |
+| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL` |
 
-Set these environment variables:
+## Remote Access
 
-| Variable        | Default     | Description                                          |
-|-----------------|-------------|-------------------------------------------------------|
-| `MCP_TRANSPORT` | `stdio`     | `stdio` or `streamable-http`                          |
-| `MCP_HOST`      | `127.0.0.1` | Bind address (use `0.0.0.0` in containers)            |
-| `MCP_PORT`      | `8765`      | Port to listen on                                     |
-
-### Example
+The default stdio transport is for local clients. To serve HTTP clients, configure
+your Mealie credentials as described above and run from the checkout:
 
 ```bash
 export MCP_TRANSPORT=streamable-http
-export MCP_HOST=0.0.0.0
+export MCP_HOST=127.0.0.1
 export MCP_PORT=8765
-python src/server.py
+uv run mealie-mcp-server
 ```
 
 The server will expose its MCP endpoint at `http://<host>:<port>/mcp`.
 
-⚠️ **Security note**: streamable-http mode has no built-in authentication. If exposing this beyond your local network, put it behind a reverse proxy that enforces auth (bearer token, basic auth, or OAuth) before it reaches the internet.
+**Security:** HTTP transports have no built-in authentication. Anyone who can
+reach the endpoint can use the configured Mealie credentials through its tools.
+Keep it on a trusted interface; for remote access, use a reverse proxy that
+enforces authentication and HTTPS.
 
-## 🐳 Docker
+## Docker
 
-A `Dockerfile` is included for running the server as a persistent container — useful for pairing it with a self-hosted Mealie instance (e.g. via Docker Compose) rather than launching it per-session from Claude Desktop.
+The [Dockerfile](Dockerfile) runs the server as a persistent container.
 
 ### Build
 
@@ -124,7 +131,7 @@ A `Dockerfile` is included for running the server as a persistent container — 
 docker build -t mealie-mcp-server .
 ```
 
-### Run standalone
+### Standalone
 
 ```bash
 docker run -d \
@@ -134,11 +141,19 @@ docker run -d \
   -e MCP_TRANSPORT=streamable-http \
   -e MCP_HOST=0.0.0.0 \
   -e MCP_PORT=8765 \
-  -p 8765:8765 \
+  -p 127.0.0.1:8765:8765 \
   mealie-mcp-server
 ```
 
-### Run alongside Mealie via Docker Compose
+The port is published only on the host's loopback interface. See
+[Remote Access](#remote-access) before making it reachable remotely.
+
+### Docker Compose
+
+Add this service to the Compose file that runs Mealie. The example assumes that
+the Mealie service is named `mealie` and both services use a network named
+`mealie_net`, defined in that Compose file. Set `MEALIE_API_KEY` in the shell or
+Compose `.env` file.
 
 ```yaml
 services:
@@ -147,7 +162,7 @@ services:
     container_name: mealie-mcp
     restart: unless-stopped
     environment:
-      MEALIE_BASE_URL: http://mealie:9000   # internal service name, no need to expose Mealie publicly
+      MEALIE_BASE_URL: http://mealie:9000
       MEALIE_API_KEY: ${MEALIE_API_KEY}
       MCP_TRANSPORT: streamable-http
       MCP_HOST: "0.0.0.0"
@@ -158,56 +173,33 @@ services:
       - mealie_net
 ```
 
-⚠️ As noted above, `streamable-http` has no built-in authentication — put a reverse proxy (with bearer token, basic auth, or OAuth) in front of it if it needs to be reachable outside your local network.
+`expose` does not publish a host port. Connect a reverse proxy on the same network
+for remote access, following the [HTTP security guidance](#remote-access).
 
-## 📖 Usage Examples
+## Usage Examples
 
-### Recipe Operations
-
-```
+```text
 "Search for chicken recipes"
 "Create a new recipe for pasta carbonara"
-"Duplicate my lasagna recipe"
 "Mark the meatloaf recipe as made today"
-"Upload an image for the chocolate cake recipe"
-```
-
-### Shopping Lists
-
-```
 "Create a shopping list for this week"
-"Add eggs and milk to my shopping list"
 "Add all ingredients from the lasagna recipe to my shopping list"
-"Check off milk on my shopping list"
-"Delete all checked items from my shopping list"
+"Plan chicken soup for lunch on Friday"
 ```
 
-### Organization
+See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooting.
 
-```
-"Show me all my recipe categories"
-"Create a new tag called 'Quick Meals'"
-"Find all recipes tagged with 'healthy'"
-"Show me categories that have no recipes"
-```
-
-### Advanced Filtering
-
-```
-"Find recipes that have both 'quick' AND 'healthy' tags"
-"Search for breakfast recipes containing 'eggs'"
-"Show me all vegetarian dinner recipes"
-```
-
-## 🎯 Available Tools
+## Available Tools
 
 ### Recipe Tools (12 operations)
 
 - `get_recipes` - List/search recipes with advanced filtering
 - `get_recipe` - Get complete recipe details, or a summary with `concise=true`
-- `create_recipe` - Create a recipe in one call; only the name is required, with optional flat or structured ingredients, instructions, metadata, nutrition, and display settings
+- `create_recipe` - Create a recipe; only the name is required, with optional
+  ingredients, instructions, metadata, nutrition, and display settings
 - `import_recipe_from_url` - Import a recipe from a web page
-- `update_recipe` - Update provided content or metadata fields (including nutrition and display settings); omitted fields are preserved, and empty lists clear content
+- `update_recipe` - Update content or metadata, including nutrition and display
+  settings; omitted fields are preserved, and empty lists clear content
 - `duplicate_recipe` - Clone a recipe
 - `mark_recipe_last_made` - Update last made timestamp
 - `set_recipe_image_from_url` - Set image from URL
@@ -253,20 +245,23 @@ services:
 - `delete_tag` - Delete tag
 
 ### Food Tools (5 operations)
-- `get_foods` - List/search foods (resolve ids for structured ingredients)
+
+- `get_foods` - List/search foods (resolve IDs for structured ingredients)
 - `create_food` - Create a new food
 - `get_food` - Get by ID
 - `update_food` - Update food
 - `delete_food` - Delete food
 
 ### Unit Tools (5 operations)
+
 - `get_units` - List/search units
 - `create_unit` - Create a new unit
 - `get_unit` - Get by ID
 - `update_unit` - Update unit
 - `delete_unit` - Delete unit
 
-### Recipe Tool Tools (5 operations)
+### Kitchen Tools (5 operations)
+
 - `get_tools` - List/search recipe tools (includes `householdsWithTool`)
 - `create_tool` - Create a new tool
 - `get_tool` - Get by exactly one of `tool_id` or `tool_slug`
@@ -286,7 +281,7 @@ services:
 - `delete_mealplan` - Delete an entry
 - `get_todays_mealplan` - Get today's meals
 
-**Total: 61 tools** providing comprehensive Mealie API coverage
+**Total: 61 tools**
 
 ### Migrating consolidated tools (breaking change)
 
@@ -316,37 +311,30 @@ response/failure contracts; paginated lists differ from individual lookups,
 unused-organizer queries, and today's meal plans. Recipe URL import, image URL
 scraping, and file uploads also perform different operations.
 
-## 🔧 Development
+## Development
 
 ### Setup
 
-1. Clone the repository:
-
-```bash
-git clone https://github.com/rldiao/mealie-mcp-server.git
-cd mealie-mcp-server
-```
-
-2. Install dependencies:
+After [cloning the repository](#installation), install development dependencies:
 
 ```bash
 uv sync --locked --extra dev
 ```
 
-3. Configure environment:
+For manual testing, configure your Mealie instance:
 
 ```bash
 cp .env.template .env
 # Edit .env with your Mealie instance details
 ```
 
-4. Run MCP inspector for testing:
+Launch the MCP Inspector:
 
 ```bash
 uv run mcp dev src/server.py
 ```
 
-5. Run the offline checks:
+Run the offline checks; these do not require a Mealie instance or credentials:
 
 ```bash
 uv run ruff check src tests
@@ -355,60 +343,46 @@ uv run pytest -q
 
 ### Project Structure
 
-```
-mealie-mcp-server/
-├── src/
-│   ├── mealie/              # API client mixins
-│   │   ├── client.py        # Base HTTP client
-│   │   ├── recipe.py        # Recipe operations
-│   │   ├── shopping_list.py # Shopping list operations
-│   │   ├── categories.py    # Category operations
-│   │   ├── tags.py          # Tag operations
-│   │   ├── mealplan.py      # Meal plan operations
-│   │   ├── parser.py        # Ingredient parser
-│   │   └── __init__.py      # MealieFetcher aggregator
-│   ├── tools/               # MCP tool definitions
-│   │   ├── recipe_tools.py
-│   │   ├── shopping_list_tools.py
-│   │   ├── categories_tools.py
-│   │   ├── tags_tools.py
-│   │   ├── mealplan_tools.py
-│   │   ├── parser_tools.py
-│   │   └── __init__.py
-│   ├── models/              # Pydantic models
-│   ├── server.py            # MCP server entry point
-│   └── prompts.py           # Server prompts
-├── CHANGELOG.md             # Version history
-└── README.md
-```
+| Path | Purpose |
+| --- | --- |
+| [`src/mealie/`](src/mealie/) | HTTP client and API mixins |
+| [`src/tools/`](src/tools/) | FastMCP tool definitions and registration |
+| [`src/models/`](src/models/) | Pydantic request and response models |
+| [`src/server.py`](src/server.py) | Configuration, lifecycle, and entry point |
+| [`src/prompts.py`](src/prompts.py) | MCP prompts |
+| [`tests/`](tests/) | Offline tests and fixtures |
 
-## 📚 Important Notes
+Repository conventions are in [AGENTS.md](AGENTS.md), with focused guidance for
+[source code](src/AGENTS.md) and [tests](tests/AGENTS.md).
 
-### Filtering by Tags/Categories
+The automated suite uses fake HTTP responses and includes local HTTP-transport
+checks. It does not replace compatibility testing against your deployed Mealie
+version.
+
+## Important Notes
+
+The calls below use Python-style notation to illustrate MCP tool arguments; they
+are not standalone Python scripts.
+
+### Filtering by Tags and Categories
 
 When filtering recipes, you **must use slugs or UUIDs**, not display names:
 
-✅ **Correct:**
+Use `get_tags()` or `get_categories()` first to find the correct slugs:
 
-```
-"Get recipes with tags=['quick-meals', 'healthy']"
-```
-
-❌ **Incorrect:**
-
-```
-"Get recipes with tags=['Quick Meals', 'Healthy']"
+```python
+get_recipes(tags=["quick-meals", "healthy"])
 ```
 
-Use `get_tags()` or `get_categories()` first to find the correct slugs.
+For example, pass `quick-meals`, not the display name `Quick Meals`.
 
 ### Nutrition Is Replaced, Not Merged
 
 Mealie replaces the whole `nutrition` object on write. `update_recipe` follows
 suit, so pass every value you want to keep:
 
-```
-# clears every nutrition value except fat
+```python
+# Clears every nutrition value except fat.
 update_recipe(slug="...", nutrition={"fatContent": "12"})
 ```
 
@@ -418,14 +392,14 @@ Resolving ingredients by hand costs one to two `get_foods` / `get_units` calls
 each. `parse_ingredients` does a whole recipe in one request and returns results
 that can be handed straight to `create_recipe`:
 
-```
+```python
 parse_ingredients(ingredients=["1/4 cup chopped onion", "2 large eggs"])
 # -> [{"input": "1/4 cup chopped onion", "confidence": 0.99, "quantity": 0.25,
 #      "unit": {"id": "...", "name": "cup"},
 #      "food": {"id": "...", "name": "onion"}, "note": "chopped"}, ...]
 ```
 
-A `null` unit or food means your instance has no matching entry — create one
+A `null` unit or food means your instance has no matching entry; create one
 with `create_food` / `create_unit`, or leave the text in the note. Pass
 `verbose=True` for Mealie's full response including per-field confidences.
 
@@ -436,13 +410,13 @@ A recipe's `settings` object controls what the UI renders. `showAssets` and
 `upload_recipe_asset_file` can be present in the API response and still be
 invisible in the web UI. Flip the toggle with:
 
-```
+```python
 update_recipe(slug="...", settings={"showAssets": True})
 ```
 
 Mealie seeds a new recipe's settings from the household preferences
 (`recipeShowAssets`, `recipeShowNutrition`, ...), so the defaults differ per
-instance — check rather than assume.
+instance. Check rather than assume.
 
 Only the toggles you pass are changed. The tool reads the recipe's current
 settings and sends the merged object, because Mealie does not reliably preserve
@@ -454,7 +428,7 @@ When updating shopping list items, both single and bulk updates fetch the curren
 records and preserve omitted fields. You only need to specify the fields you
 want to change:
 
-```
+```python
 # Only updates 'checked' field, preserves note, quantity, etc.
 update_shopping_list_item(item_id="...", checked=True)
 ```
@@ -481,39 +455,21 @@ recovery information identifying completed work. Inspect that information and
 the current Mealie state rather than blindly retrying the entire operation.
 A failed or timed-out request may have completed remotely.
 
-## 🐛 Known Issues
+## Support and Contributing
 
-The automated suite exercises MCP tools with fake HTTP responses and includes
-local HTTP-transport checks. It does not replace compatibility testing against
-your deployed Mealie version.
+- Check the [changelog](CHANGELOG.md) for changes and migration notes.
+- Review the [usage guide](USAGE_EXAMPLES.md) and
+  [Mealie documentation](https://docs.mealie.io).
+- Report problems through [GitHub issues](https://github.com/rldiao/mealie-mcp-server/issues).
+- For pull requests, follow the [development workflow](#development) and include
+  tests for behavior changes.
 
-## 🔄 Changelog
+## License and Credits
 
-See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes and version history.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Credits
+Licensed under the [MIT License](LICENSE).
 
 - [Mealie](https://github.com/mealie-recipes/mealie) - The recipe management system
-- [Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk) - The SDK and bundled FastMCP server
-
-## 📞 Support
-
-For issues and questions:
-
-- Check the [CHANGELOG.md](CHANGELOG.md) for recent updates
-- Review the Mealie API documentation
-- Open an issue on GitHub
-
-## 🔗 Related Links
-
-- [Mealie Documentation](https://docs.mealie.io)
-- [MCP Protocol Specification](https://modelcontextprotocol.io)
+- [Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk) - SDK and
+  bundled FastMCP server
+- [Model Context Protocol](https://modelcontextprotocol.io) - Protocol documentation
 - [Claude Desktop](https://claude.ai/download)
