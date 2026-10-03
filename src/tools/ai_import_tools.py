@@ -30,7 +30,7 @@ def register_ai_import_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
         Provide at least one source. Image paths must be accessible to the server.
 
-        Saves immediately and returns the recipe for review. AI charges may apply.
+        Saves immediately and returns the recipe for review.
         """
         with tool_error_boundary("Error importing recipe with AI"):
             images = []
