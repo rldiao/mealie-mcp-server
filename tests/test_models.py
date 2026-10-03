@@ -1,6 +1,8 @@
 """Tests for the Pydantic recipe models, including the typing fixes."""
 
+import pytest
 from conftest import BASE_RECIPE
+from pydantic import ValidationError
 
 from models.recipe import (
     OrganizerRef,
@@ -103,3 +105,48 @@ def test_recipe_nutrition_coerces_numbers_to_strings():
         "calories": "450",
         "fatContent": "31.5",
     }
+
+
+@pytest.mark.parametrize("field", ["recipeServings", "recipeYieldQuantity"])
+def test_recipe_accepts_fractional_quantities(field):
+    recipe = Recipe.model_validate({**BASE_RECIPE, field: 2.5})
+    assert getattr(recipe, field) == 2.5
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "id",
+        "name",
+        "dateAdded",
+        "dateUpdated",
+        "createdAt",
+        "updatedAt",
+        "recipeCategory",
+        "tags",
+        "recipeInstructions",
+        "nutrition",
+        "settings",
+        "assets",
+        "notes",
+        "extras",
+        "comments",
+    ],
+)
+def test_recipe_accepts_api_nullable_fields(field):
+    recipe = Recipe.model_validate({**BASE_RECIPE, field: None})
+    assert getattr(recipe, field) is None
+
+
+@pytest.mark.parametrize("missing", ["id", "name"])
+def test_organizer_ref_rejects_missing_required_fields(missing):
+    data = {"id": "a0819c33-1a5e-4374-9151-ed85160c0049", "name": "Quick"}
+    del data[missing]
+    with pytest.raises(ValidationError):
+        OrganizerRef.model_validate(data)
+
+
+@pytest.mark.parametrize("quantity", [float("inf"), float("-inf"), float("nan")])
+def test_ingredient_rejects_nonfinite_quantity(quantity):
+    with pytest.raises(ValidationError):
+        RecipeIngredientInput(quantity=quantity)

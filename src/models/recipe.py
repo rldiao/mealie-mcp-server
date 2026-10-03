@@ -33,7 +33,7 @@ class IngredientFood(BaseModel):
 
 
 class RecipeIngredient(BaseModel):
-    quantity: Optional[float] = None
+    quantity: Optional[float] = Field(default=None, allow_inf_nan=False)
     unit: Optional[IngredientUnit] = None
     food: Optional[IngredientFood] = None
     note: Optional[str] = None
@@ -172,39 +172,39 @@ class RecipeTool(BaseModel):
 
 
 class Recipe(BaseModel):
-    id: str
+    id: Optional[str] = None
     userId: str
     householdId: str
     groupId: str
-    name: str
+    name: Optional[str] = None
     slug: str
-    image: Optional[str] = None
-    recipeServings: Optional[int] = None
-    recipeYieldQuantity: Optional[int] = 0
+    image: Any = None
+    recipeServings: Optional[float] = None
+    recipeYieldQuantity: Optional[float] = 0
     recipeYield: Optional[str] = None
     totalTime: Optional[str] = None
     prepTime: Optional[str] = None
     cookTime: Optional[str] = None
     performTime: Optional[str] = None
     description: Optional[str] = None
-    recipeCategory: List[RecipeCategory] = Field(default_factory=list)
-    tags: List[RecipeTag] = Field(default_factory=list)
+    recipeCategory: Optional[List[RecipeCategory]] = Field(default_factory=list)
+    tags: Optional[List[RecipeTag]] = Field(default_factory=list)
     tools: List[RecipeTool] = Field(default_factory=list)
     rating: Optional[float] = None
     orgURL: Optional[str] = None
-    dateAdded: str
-    dateUpdated: str
-    createdAt: str
-    updatedAt: str
+    dateAdded: Optional[str] = None
+    dateUpdated: Optional[str] = None
+    createdAt: Optional[str] = None
+    updatedAt: Optional[str] = None
     lastMade: Optional[str] = None
     recipeIngredient: List[RecipeIngredient] = Field(default_factory=list)
-    recipeInstructions: List[RecipeInstruction] = Field(default_factory=list)
-    nutrition: RecipeNutrition = Field(default_factory=RecipeNutrition)
-    settings: RecipeSettings = Field(default_factory=RecipeSettings)
-    assets: List[Any] = Field(default_factory=list)
-    notes: List[Any] = Field(default_factory=list)
-    extras: Dict[str, Any] = Field(default_factory=dict)
-    comments: List[Any] = Field(default_factory=list)
+    recipeInstructions: Optional[List[RecipeInstruction]] = Field(default_factory=list)
+    nutrition: Optional[RecipeNutrition] = Field(default_factory=RecipeNutrition)
+    settings: Optional[RecipeSettings] = Field(default_factory=RecipeSettings)
+    assets: Optional[List[Any]] = Field(default_factory=list)
+    notes: Optional[List[Any]] = Field(default_factory=list)
+    extras: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    comments: Optional[List[Any]] = Field(default_factory=list)
 
 
 class RecipeIngredientInput(BaseModel):
@@ -224,7 +224,7 @@ class RecipeIngredientInput(BaseModel):
         ),
     )
     quantity: Optional[float] = Field(
-        default=None, description="Numeric amount, e.g. 200."
+        default=None, allow_inf_nan=False, description="Numeric amount, e.g. 200."
     )
     unit: Optional[Dict[str, Any]] = Field(
         default=None,
