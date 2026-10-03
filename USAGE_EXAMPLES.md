@@ -56,6 +56,38 @@ And these instructions:
 After importing, check that the returned name and content match the source.
 Scraping support varies by website and Mealie version.
 
+### Optional AI Import
+
+Enable `MEALIE_ENABLE_AI_IMPORT=true`, restart the MCP server, and refresh the
+client's tools. Mealie 3.23.0+ and a configured default AI provider are required.
+Photos need an image provider; video transcription needs an audio provider.
+
+```python
+import_recipe_with_ai(content="Tomato toast: toast bread, add sliced tomato and salt.")
+
+import_recipe_with_ai(
+    url="https://example.com/recipe",
+    content="Name it Weeknight Pasta and use half the chilli.",
+    translate_language="English",
+)
+
+import_recipe_with_ai(
+    image_paths=["/server/recipes/page-1.jpg", "/server/recipes/page-2.jpg"],
+    create_new_organizers=False,
+)
+```
+
+Image paths must exist on the MCP server, including inside its container when
+applicable. These examples create and save recipes, sending sources through
+Mealie's configured AI providers; provider charges may apply. Multiple sources
+produce one recipe, and supplied text wins on disagreement. Review the result.
+
+Prefer `import_recipe_from_url` for an ordinary recipe webpage, `create_recipe`
+for a recipe already composed into ingredients and instructions, and
+`upload_recipe_image_file` to attach a photo without extracting a new recipe.
+Never automatically retry an import after a timeout: first check whether Mealie
+created it. A failed follow-up fetch returns `created_slug` and `stage` for recovery.
+
 ### Updating Recipes
 
 ```text

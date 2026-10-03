@@ -28,6 +28,8 @@ async def test_consolidated_inventory_matches_documentation(server):
     names = {tool.name for tool in tools}
     assert len(names) == len(tools) == 61
     assert names.isdisjoint(REMOVED_TOOLS)
+    assert "import_recipe_with_ai" not in names
+    assert all("import_recipe_with_ai" not in (tool.description or "") for tool in tools)
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
     inventory = readme.split("### Recipe Tools", 1)[1].split(
         "### Migrating consolidated tools", 1
@@ -45,6 +47,12 @@ async def test_consolidated_inventory_matches_documentation(server):
 async def test_removed_tool_names_are_rejected(invoke, fetcher, name):
     with pytest.raises(ToolError, match="Unknown tool"):
         await invoke(name)
+    assert fetcher.requests == []
+
+
+async def test_ai_import_is_not_callable_by_default(invoke, fetcher):
+    with pytest.raises(ToolError, match="Unknown tool"):
+        await invoke("import_recipe_with_ai", content="recipe")
     assert fetcher.requests == []
 
 

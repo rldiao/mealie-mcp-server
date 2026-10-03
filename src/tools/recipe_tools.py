@@ -307,11 +307,13 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     ) -> Dict[str, Any]:
         """Import a recipe into Mealie by scraping a URL.
 
+        Prefer this for ordinary recipe webpages.
+
         Uses Mealie's server-side scraper (the `recipe-scrapers` library), which
         has built-in adapters for many recipe sites and falls back to
         JSON-LD/Schema.org parsing for sites without a dedicated adapter.
-        Coverage varies by Mealie version; URLs the scraper can't parse return
-        a 400 from Mealie.
+        Mealie may fall back to AI when configured. Coverage varies by Mealie
+        version; URLs Mealie cannot parse return an error.
 
         The created recipe is fetched and returned so the caller can verify the
         scrape result. Some sources (notably paywalled URLs that redirect) can
@@ -357,6 +359,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     ) -> Dict[str, Any]:
         """Create a recipe and populate all of its content in one call.
 
+        Use when the recipe is already composed into ingredients and instructions.
         Only name is required. Provide ingredients and instructions for a basic
         recipe, or include metadata, nutrition, and display settings for a
         complete recipe. Omitted or null fields keep Mealie's defaults; empty
@@ -560,6 +563,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     ) -> Dict[str, Any]:
         """Upload an image file for a recipe.
 
+        Attach a photo to an existing recipe; this does not extract recipe text
+        from the image or create a new recipe.
         Args:
             slug: The unique text identifier for the recipe.
             image_path: Local file path to the image to upload.

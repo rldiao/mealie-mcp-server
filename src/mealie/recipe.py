@@ -1,6 +1,12 @@
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
+import httpx
+from pydantic import HttpUrl, TypeAdapter, ValidationError
+
+from mealie.client import MealieApiError
+from models.ai_import import AIProviderCapabilities
 from utils import format_api_params
 
 logger = logging.getLogger("mealie-mcp")
@@ -162,6 +168,78 @@ class RecipeMixin:
             "/api/recipes/create/url",
             json={"url": url, "includeTags": include_tags},
         )
+
+    def import_recipe_with_ai(
+        self,
+        content: str | None = None,
+        url: str | None = None,
+        images: list[tuple[str, bytes]] | None = None,
+        translate_language: str | None = None,
+        create_new_organizers: bool = False,
+    ) -> str:
+        """Import combined sources using Mealie's configured AI providers."""
+        for value, label in (
+            (content, "Content"), (url, "URL"), (translate_language, "Translation language")
+        ):
+            if value is not None and not value.strip():
+                raise ValueError(f"{label} cannot be empty")
+        if not (content or url or images):
+            raise ValueError("Provide content, a URL, or at least one image")
+        if url is not None:
+            TypeAdapter(HttpUrl).validate_python(url)
+        for filename, image in images or []:
+            if not filename.strip() or not image:
+                raise ValueError("Image filename and data cannot be empty")
+
+        try:
+            group = self.get_current_group()
+        except (MealieApiError, TimeoutError, ConnectionError):
+            raise ValueError("Unable to determine Mealie AI capabilities") from None
+        try:
+            capabilities = AIProviderCapabilities.model_validate(
+                group.get("aiProviderSettings") if isinstance(group, dict) else None
+            )
+        except ValidationError:
+            raise ValueError("Unable to determine Mealie AI capabilities") from None
+        if not capabilities.aiEnabled:
+            raise ValueError("Configure a default AI provider in Mealie before importing")
+        if images and not capabilities.imageProviderEnabled:
+            raise ValueError("Configure an image AI provider in Mealie before importing photos")
+
+        data = {"createNewOrganizers": str(create_new_organizers).lower()}
+        for key, value in (
+            ("content", content), ("url", url), ("translateLanguage", translate_language)
+        ):
+            if value is not None:
+                data[key] = value
+        # Mealie stores uploads by basename; prefix every name to avoid collisions.
+        files = [
+            ("images", (f"{index}-{filename}", image))
+            for index, (filename, image) in enumerate(images or [])
+        ]
+        logger.info({"message": "Importing recipe with AI"})
+        try:
+            slug = self._handle_request(
+                "POST", "/api/recipes/create/ai", data=data, files=files or None,
+                timeout=httpx.Timeout(30.0, read=300.0),
+            )
+        except MealieApiError as error:
+            if error.status_code == 404:
+                raise ValueError(
+                    "AI import endpoint unavailable; Mealie 3.23.0 or newer is required"
+                ) from None
+            raise
+        except (TimeoutError, ConnectionError):
+            raise ValueError(
+                "AI import connection failed or timed out; creation outcome is unknown. "
+                "Check Mealie for the recipe before retrying or using another import tool."
+            ) from None
+        if not isinstance(slug, str) or not re.fullmatch(r"[\w-]+", slug):
+            raise ValueError(
+                "Mealie returned an invalid AI import slug; creation outcome is unknown. "
+                "Check Mealie before retrying."
+            )
+        return slug
 
     def patch_recipe(self, slug: str, recipe_data: Dict[str, Any]) -> Dict[str, Any]:
         """Partially update a recipe (only updates provided fields)

@@ -16,7 +16,7 @@ import pytest
 def load_server(monkeypatch, request):
     monkeypatch.setenv("MEALIE_BASE_URL", "http://mealie.invalid")
     monkeypatch.setenv("MEALIE_API_KEY", "test-placeholder")
-    for name in ("MCP_TRANSPORT", "MCP_HOST", "MCP_PORT"):
+    for name in ("MCP_TRANSPORT", "MCP_HOST", "MCP_PORT", "MEALIE_ENABLE_AI_IMPORT"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr("dotenv.load_dotenv", lambda: None)
 
@@ -175,6 +175,8 @@ async def test_http_client_survives_individual_mcp_sessions(load_server):
         ("MCP_PORT", "not-a-port"),
         ("MCP_PORT", "0"),
         ("MCP_PORT", "65536"),
+        ("MEALIE_ENABLE_AI_IMPORT", "yes"),
+        ("MEALIE_ENABLE_AI_IMPORT", ""),
     ],
 )
 def test_invalid_configuration_fails_before_http_allocation(load_server, monkeypatch, name, value):
@@ -184,6 +186,56 @@ def test_invalid_configuration_fails_before_http_allocation(load_server, monkeyp
         server["main"]()
     assert requests == []
     factory.assert_not_called()
+
+
+@pytest.mark.parametrize("value,enabled", [("true", True), ("TRUE", True), ("false", False), ("False", False)])
+@pytest.mark.parametrize("transport", ["stdio", "sse", "streamable-http"])
+async def test_ai_import_lazy_runtime_registration(load_server, monkeypatch, value, enabled, transport):
+    monkeypatch.setenv("MEALIE_ENABLE_AI_IMPORT", value)
+    namespace, _, requests, factory = load_server()
+    mcp = namespace["mcp"]
+    assert len(await mcp.list_tools()) == 61
+    factory.assert_not_called()
+    assert requests == []
+    async with server_lifespan(mcp, transport):
+        tools = await mcp.list_tools()
+        assert len(tools) == (62 if enabled else 61)
+        assert ("import_recipe_with_ai" in {t.name for t in tools}) is enabled
+        async with mcp.settings.lifespan(mcp):
+            assert len(await mcp.list_tools()) == len(tools)
+    factory.assert_called_once()
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_ai_import_explicit_configuration_discovery(load_server, enabled):
+    namespace, _, requests, factory = load_server()
+    config = namespace["ServerConfig"]("http://mealie.invalid", "placeholder", enable_ai_import=enabled)
+    mcp = namespace["create_server"](config)
+    assert len(await mcp.list_tools()) == (62 if enabled else 61)
+    factory.assert_not_called()
+    assert requests == []
+
+
+@pytest.mark.parametrize("transport", ["stdio", "sse", "streamable-http"])
+async def test_invalid_ai_opt_in_fails_lazy_startup(load_server, monkeypatch, transport):
+    monkeypatch.setenv("MEALIE_ENABLE_AI_IMPORT", "invalid")
+    namespace, _, requests, factory = load_server()
+    with pytest.raises(ValueError, match="MEALIE_ENABLE_AI_IMPORT"):
+        async with server_lifespan(namespace["mcp"], transport):
+            pytest.fail("Invalid opt-in must fail startup")
+    factory.assert_not_called()
+    assert requests == []
+
+
+@pytest.mark.parametrize("transport", ["stdio", "sse", "streamable-http"])
+async def test_ai_import_main_registration(load_server, monkeypatch, transport):
+    monkeypatch.setenv("MEALIE_ENABLE_AI_IMPORT", "true")
+    monkeypatch.setenv("MCP_TRANSPORT", transport)
+    namespace, _, _, _ = load_server()
+    with patch.object(namespace["FastMCP"], "run", autospec=True) as run:
+        namespace["main"]()
+    mcp = run.call_args.args[0]
+    assert len(await mcp.list_tools()) == 62
 
 
 @pytest.mark.parametrize(
@@ -235,7 +287,11 @@ def test_main_health_failure_raises_before_http_runner(load_server, monkeypatch)
     assert client.is_closed
 
 
-async def test_http_sessions_initialize_list_and_call_tools(load_server):
+@pytest.mark.parametrize("enable_ai_import", [False, True])
+async def test_http_sessions_initialize_list_and_call_tools(load_server, monkeypatch, enable_ai_import):
+    # sse-starlette's global event must not retain a previous test's event loop.
+    monkeypatch.setattr("sse_starlette.sse.AppStatus.should_exit_event", None)
+    monkeypatch.setenv("MEALIE_ENABLE_AI_IMPORT", str(enable_ai_import).lower())
     server, mealie_client, requests, factory = load_server()
     app = server["mcp"].streamable_http_app()
     session_ids = set()
@@ -281,6 +337,7 @@ async def test_http_sessions_initialize_list_and_call_tools(load_server):
                 )
                 assert response.status_code == 200
                 assert "parse_ingredients" in response.text
+                assert ('"name":"import_recipe_with_ai"' in response.text) is enable_ai_import
 
                 response = await client.post(
                     "/mcp",

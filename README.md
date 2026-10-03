@@ -97,6 +97,7 @@ your instance details. Never commit your API key.
 | --- | --- | --- |
 | `MEALIE_BASE_URL` | Required | Mealie base URL, including protocol and port if needed |
 | `MEALIE_API_KEY` | Required | API key from your Mealie account settings |
+| `MEALIE_ENABLE_AI_IMPORT` | `false` | Opt in to AI recipe import; accepts `true`/`false` (case-insensitive) |
 | `MCP_TRANSPORT` | `stdio` | `stdio`, `streamable-http`, or legacy `sse` |
 | `MCP_HOST` | `127.0.0.1` | HTTP bind address; use `0.0.0.0` in containers |
 | `MCP_PORT` | `8765` | HTTP port, from 1 to 65535 |
@@ -283,6 +284,10 @@ See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooti
 
 **Total: 61 tools**
 
+With `MEALIE_ENABLE_AI_IMPORT=true`, `import_recipe_with_ai` adds one optional
+recipe operation: **62 total tools, including 13 recipe tools**. It is absent
+from discovery and cannot be called when disabled.
+
 ### Migrating consolidated tools (breaking change)
 
 Redundant MCP names have been removed, not retained as aliases. Refresh your
@@ -310,6 +315,57 @@ Distinct operations remain separate: single and bulk writes have different
 response/failure contracts; paginated lists differ from individual lookups,
 unused-organizer queries, and today's meal plans. Recipe URL import, image URL
 scraping, and file uploads also perform different operations.
+
+### Optional AI recipe import
+
+Set `MEALIE_ENABLE_AI_IMPORT=true` in your MCP client's environment, shell, or
+local `.env`. Restart the server and refresh the client's tool list. This applies
+to stdio, SSE, and Streamable HTTP. Offline SDK discovery remains configuration-
+and network-free, listing only default tools; optional registration occurs at
+runtime startup (or when passing an explicit enabled `ServerConfig`).
+
+`import_recipe_with_ai` requires **Mealie 3.23.0+** and a default AI provider
+configured for the API user's group. It accepts any combination of:
+
+- `content`: plain text, raw HTML, or JSON; also used for corrections or notes.
+- `url`: an HTTP(S) recipe or video URL, fetched by Mealie and saved as the source.
+- `image_paths`: ordered image paths accessible to the **MCP server's filesystem**,
+  not a remote caller's computer. Multiple photos become one recipe; the first
+  becomes its cover image.
+
+At least one nonblank source is required. Sources are combined, with pasted
+content taking precedence when they disagree. Optional `translate_language`
+requests translation. `create_new_organizers` defaults to `false`: matching
+existing tags, categories, and kitchen tools may be assigned, but new ones are
+created only when explicitly requested.
+
+Before each import the server reads `/api/groups/self` to check `aiEnabled` and,
+for photos, `imageProviderEnabled`. Missing/malformed capabilities or a failed
+lookup produce an explicit error, not a silent disabled result. Video detection
+and the audio-provider requirement are handled by Mealie. These checks establish
+configuration, not provider connectivity, credentials, or available quota.
+
+**This tool immediately creates and saves a recipe.** Source material is processed
+by Mealie's configured AI providers and may incur charges. Review the returned
+recipe for accuracy. The import has a 300-second read timeout; other API calls
+retain their existing timeouts. No imports are automatically retried. After a
+timeout or connection failure, check Mealie before retrying or switching tools:
+creation may already have succeeded. If the follow-up fetch fails, the error
+includes `created_slug` and `stage`; retrieve that recipe rather than importing again.
+
+Choose the tool according to the task:
+
+| Task | Tool |
+| --- | --- |
+| Ordinary recipe webpage | `import_recipe_from_url` |
+| Unstructured text, photos, video, combined sources, translation, or explicit AI import | `import_recipe_with_ai` (opt-in) |
+| Save already-composed ingredients and instructions | `create_recipe` |
+| Attach a photo to an existing recipe without extracting content | `upload_recipe_image_file` |
+
+The opt-in controls only this new tool. It does not disable Mealie's own AI
+fallback for URL scraping or other existing AI features. See
+[Mealie's AI import documentation](https://mealie.io/documentation/getting-started/installation/ai-providers/#import-with-ai)
+and [usage examples](USAGE_EXAMPLES.md#optional-ai-import).
 
 ## Development
 

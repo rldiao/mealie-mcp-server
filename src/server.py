@@ -10,7 +10,7 @@ from mcp.server.fastmcp import FastMCP
 
 from mealie import MealieFetcher
 from prompts import register_prompts
-from tools import register_all_tools
+from tools import register_ai_import_tools, register_all_tools
 
 logger = logging.getLogger("mealie-mcp")
 Transport = Literal["stdio", "sse", "streamable-http"]
@@ -24,10 +24,14 @@ class ServerConfig:
     host: str = "127.0.0.1"
     port: int = 8765
     log_level: str = "INFO"
+    enable_ai_import: bool = False
 
     @classmethod
     def from_environment(cls) -> "ServerConfig":
         load_dotenv()
+        ai_import = os.getenv("MEALIE_ENABLE_AI_IMPORT", "false").strip().lower()
+        if ai_import not in ("true", "false"):
+            raise ValueError("MEALIE_ENABLE_AI_IMPORT must be true or false")
         base_url = os.getenv("MEALIE_BASE_URL")
         api_key = os.getenv("MEALIE_API_KEY")
         if not base_url or not api_key:
@@ -56,6 +60,7 @@ class ServerConfig:
             host=os.getenv("MCP_HOST", "127.0.0.1"),
             port=port,
             log_level=log_level,
+            enable_ai_import=ai_import == "true",
         )
 
 
@@ -108,9 +113,11 @@ class _ClientProvider:
 class _MealieServer(FastMCP):
     def __init__(self, config: ServerConfig | None):
         self.client_provider = _ClientProvider(config)
+        self._ai_import_registered = False
 
         @asynccontextmanager
         async def lifespan(_: FastMCP) -> AsyncIterator[dict[str, MealieFetcher]]:
+            self._configure_optional_tools()
             async with self.client_provider.lifespan() as client:
                 yield {"mealie": client}
 
@@ -122,8 +129,15 @@ class _MealieServer(FastMCP):
             lifespan=lifespan,
         )
 
+    def _configure_optional_tools(self) -> None:
+        config = self.client_provider.configuration()
+        if config.enable_ai_import and not self._ai_import_registered:
+            register_ai_import_tools(self, self.client_provider)
+            self._ai_import_registered = True
+
     def run(self, transport: Transport = "stdio", mount_path: str | None = None) -> None:
         config = self.client_provider.configuration()
+        self._configure_optional_tools()
         self.settings.host = config.host
         self.settings.port = config.port
         self.settings.log_level = config.log_level
@@ -138,6 +152,7 @@ class _MealieServer(FastMCP):
 
         @asynccontextmanager
         async def lifespan(application):
+            self._configure_optional_tools()
             # SDK lifespans are per MCP session. HTTP also needs an outer owner
             # to check health at startup and keep the client alive between sessions.
             async with self.client_provider.lifespan():
@@ -159,6 +174,8 @@ def create_server(config: ServerConfig | None = None) -> FastMCP:
     server = _MealieServer(config)
     register_prompts(server)
     register_all_tools(server, server.client_provider)
+    if config is not None:
+        server._configure_optional_tools()
     return server
 
 

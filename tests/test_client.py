@@ -157,3 +157,55 @@ def test_unexpected_failures_propagate_without_logging_content(make_client, capl
         client._handle_request("GET", "/api/items")
     assert caught.value is failure
     assert "private-programming-failure" not in caplog.text
+
+
+@pytest.mark.parametrize("with_images", [False, True])
+def test_ai_import_wire_encoding_and_timeout(make_client, monkeypatch, with_images):
+    from email.parser import BytesParser
+    from urllib.parse import parse_qs
+
+    from mealie import MealieFetcher
+
+    http_client, _, requests = make_client(response=httpx.Response(201, json="recipe"))
+    http_client.timeout = httpx.Timeout(30.0)
+    client = MealieFetcher("https://private-host.invalid", "synthetic-key")
+    monkeypatch.setattr(client, "get_current_group", lambda: {
+        "aiProviderSettings": {
+            "aiEnabled": True, "imageProviderEnabled": True, "audioProviderEnabled": False
+        }
+    })
+    images = [("same.jpg", b"first"), ("same.jpg", b"second")] if with_images else None
+    assert client.import_recipe_with_ai(
+        content="source", url="https://example.com/recipe", images=images,
+        translate_language="French", create_new_organizers=True,
+    ) == "recipe"
+    request = requests[-1]
+    assert request.method == "POST"
+    assert request.url.path == "/api/recipes/create/ai"
+    assert request.extensions["timeout"] == {
+        "connect": 30.0, "read": 300.0, "write": 30.0, "pool": 30.0
+    }
+    expected = {
+        "content": "source", "url": "https://example.com/recipe",
+        "translateLanguage": "French", "createNewOrganizers": "true",
+    }
+    if with_images:
+        content_type = request.headers["content-type"]
+        assert content_type.startswith("multipart/form-data; boundary=")
+        message = BytesParser().parsebytes(
+            f"Content-Type: {content_type}\r\n\r\n".encode() + request.content
+        )
+        parts = message.get_payload()
+        assert {
+            part.get_param("name", header="content-disposition"): part.get_payload(decode=True).decode()
+            for part in parts if not part.get_filename()
+        } == expected
+        files = [part for part in parts if part.get_filename()]
+        assert [part.get_param("name", header="content-disposition") for part in files] == ["images", "images"]
+        assert [part.get_filename() for part in files] == ["0-same.jpg", "1-same.jpg"]
+        assert [part.get_payload(decode=True) for part in files] == [b"first", b"second"]
+    else:
+        assert request.headers["content-type"] == "application/x-www-form-urlencoded"
+        assert parse_qs(request.content.decode()) == {key: [value] for key, value in expected.items()}
+    client.get_recipes()
+    assert requests[-1].extensions["timeout"]["read"] == 30.0

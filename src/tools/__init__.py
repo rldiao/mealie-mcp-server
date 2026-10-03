@@ -1,3 +1,4 @@
+from .ai_import_tools import register_ai_import_tools
 from .categories_tools import register_categories_tools
 from .foods_tools import register_foods_tools
 from .mealplan_tools import register_mealplan_tools
@@ -9,7 +10,7 @@ from .tools_tools import register_tools_tools
 from .units_tools import register_units_tools
 
 
-def register_all_tools(mcp, mealie):
+def register_all_tools(mcp, mealie, *, enable_ai_import: bool = False):
     """Register all tools with the MCP server."""
     register_recipe_tools(mcp, mealie)
     register_categories_tools(mcp, mealie)
@@ -20,9 +21,12 @@ def register_all_tools(mcp, mealie):
     register_shopping_list_tools(mcp, mealie)
     register_mealplan_tools(mcp, mealie)
     register_parser_tools(mcp, mealie)
+    if enable_ai_import:
+        register_ai_import_tools(mcp, mealie)
 
 
 __all__ = [
+    "register_ai_import_tools",
     "register_all_tools",
     "register_recipe_tools",
     "register_categories_tools",
