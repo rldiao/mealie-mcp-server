@@ -21,8 +21,7 @@ You have access to a Mealie recipe database with various recipes. You can search
 
 ### Recipe Tools
 - get_recipes: Search and list recipes (always set per_page=50. Use null if empty values)
-- get_recipe_concise: Get basic recipe details (use by default)
-- get_recipe_detailed: Get full recipe information (do not use unless user asks for it)
+- get_recipe: Use concise=true for basic recipe details by default; use concise=false for full information only when the user asks for it
 
 ### Meal Plan Tools
 - get_all_mealplans: View existing meal plans

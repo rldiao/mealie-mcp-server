@@ -1,13 +1,9 @@
-import logging
-import traceback
 from typing import Any, Dict, Optional
 
 from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.exceptions import ToolError
 
 from mealie import MealieFetcher
-
-logger = logging.getLogger("mealie-mcp")
+from tools.errors import tool_error_boundary
 
 
 def register_units_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
@@ -32,18 +28,8 @@ def register_units_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Units (under "items") with pagination information.
         """
-        try:
-            logger.info(
-                {"message": "Fetching units", "search": search, "per_page": per_page}
-            )
+        with tool_error_boundary("Error fetching units"):
             return mealie.get_units(search=search, page=page, per_page=per_page)
-        except Exception as e:
-            error_msg = f"Error fetching units: {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def create_unit(
@@ -63,21 +49,13 @@ def register_units_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The created unit.
         """
-        try:
-            logger.info({"message": "Creating unit", "name": name})
+        with tool_error_boundary("Error creating unit"):
             return mealie.create_unit(
                 name,
                 abbreviation=abbreviation,
                 plural_name=plural_name,
                 description=description,
             )
-        except Exception as e:
-            error_msg = f"Error creating unit '{name}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def get_unit(unit_id: str) -> Dict[str, Any]:
@@ -89,16 +67,8 @@ def register_units_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The unit details.
         """
-        try:
-            logger.info({"message": "Fetching unit", "unit_id": unit_id})
+        with tool_error_boundary("Error fetching unit"):
             return mealie.get_unit(unit_id)
-        except Exception as e:
-            error_msg = f"Error fetching unit '{unit_id}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def update_unit(
@@ -120,9 +90,7 @@ def register_units_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: The updated unit.
         """
-        try:
-            logger.info({"message": "Updating unit", "unit_id": unit_id})
-
+        with tool_error_boundary("Error updating unit"):
             unit_data: Dict[str, Any] = {}
             if name is not None:
                 unit_data["name"] = name
@@ -137,13 +105,6 @@ def register_units_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 raise ValueError("At least one field must be provided to update")
 
             return mealie.update_unit(unit_id, unit_data)
-        except Exception as e:
-            error_msg = f"Error updating unit '{unit_id}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)
 
     @mcp.tool()
     def delete_unit(unit_id: str) -> Dict[str, Any]:
@@ -155,13 +116,5 @@ def register_units_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Returns:
             Dict[str, Any]: Confirmation of deletion.
         """
-        try:
-            logger.info({"message": "Deleting unit", "unit_id": unit_id})
+        with tool_error_boundary("Error deleting unit"):
             return mealie.delete_unit(unit_id)
-        except Exception as e:
-            error_msg = f"Error deleting unit '{unit_id}': {str(e)}"
-            logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise ToolError(error_msg)

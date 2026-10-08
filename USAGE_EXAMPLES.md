@@ -1,47 +1,42 @@
 # Usage Examples
 
-Practical examples for using the Mealie MCP Server with Claude Desktop.
+Example requests for Claude Desktop or another MCP client connected to the
+Mealie MCP Server. See the [README](README.md#quick-start) for setup and the
+[tool inventory](README.md#available-tools) for supported operations.
 
-## Table of Contents
+These are natural-language prompts, not literal tool calls. The assistant should
+resolve recipe slugs, organizer IDs, and list IDs before making changes.
+
+## Contents
 
 - [Recipe Management](#recipe-management)
 - [Shopping Lists](#shopping-lists)
 - [Meal Planning](#meal-planning)
 - [Organization](#organization)
 - [Advanced Workflows](#advanced-workflows)
-
----
+- [Best Practices](#best-practices)
+- [Troubleshooting](#troubleshooting)
+- [See Also](#see-also)
 
 ## Recipe Management
 
 ### Finding Recipes
 
-**Simple search:**
-```
+```text
 "Search for chicken recipes"
 "Find recipes with 'pasta' in the name"
-"Show me all recipes containing 'garlic'"
-```
-
-**Advanced filtering:**
-```
 "Find recipes tagged with 'quick' OR 'easy'"
 "Show me recipes that have BOTH 'healthy' AND 'quick' tags"
 "Get all breakfast recipes"
 ```
 
-**Important:** When filtering by tags/categories, first get the slugs:
-```
-User: "Show me all quick meal recipes"
-Claude: First, let me get the tags to find the right slug...
-         [Finds tag slug is "quick-meals"]
-         Now filtering recipes by tag slug "quick-meals"...
-```
+Recipe filters accept slugs or UUIDs, not display names. The assistant should
+look up tags and categories first; for example, resolve `Quick Meals` to
+`quick-meals` before filtering.
 
-### Creating Recipes
+### Creating, Importing, and Duplicating Recipes
 
-**Simple recipe:**
-```
+```text
 "Create a recipe for scrambled eggs with these ingredients:
 - 2 eggs
 - 1 tbsp butter
@@ -49,165 +44,169 @@ Claude: First, let me get the tags to find the right slug...
 
 And these instructions:
 1. Beat eggs in a bowl
-2. Melt butter in pan
-3. Pour eggs and scramble until cooked"
+2. Melt butter in a pan
+3. Pour in the eggs and scramble until cooked"
 ```
 
-**From existing recipe (duplicate):**
-```
-"Duplicate my lasagna recipe"
+```text
+"Import the recipe from this URL: <recipe URL>"
 "Make a copy of the chocolate cake recipe called 'Birthday Cake'"
 ```
 
+After importing, check that the returned name and content match the source.
+Scraping support varies by website and Mealie version.
+
+### Optional AI Import
+
+Enable `MEALIE_ENABLE_AI_IMPORT=true`, restart the MCP server, and refresh the
+client's tools. Mealie 3.23.0+ and a configured default AI provider are required.
+Photos need an image provider; video transcription needs an audio provider.
+
+```python
+import_recipe_with_ai(content="Tomato toast: toast bread, add sliced tomato and salt.")
+
+import_recipe_with_ai(
+    url="https://example.com/recipe",
+    content="Name it Weeknight Pasta and use half the chilli.",
+    translate_language="English",
+)
+
+import_recipe_with_ai(
+    image_paths=["/server/recipes/page-1.jpg", "/server/recipes/page-2.jpg"],
+    create_new_organizers=False,
+)
+```
+
+Image paths must exist on the MCP server, including inside its container when
+applicable. These examples create and save recipes, sending sources through
+Mealie's configured AI providers; provider charges may apply. Multiple sources
+produce one recipe, and supplied text wins on disagreement. Review the result.
+
+Prefer `import_recipe_from_url` for an ordinary recipe webpage, `create_recipe`
+for a recipe already composed into ingredients and instructions, and
+`upload_recipe_image_file` to attach a photo without extracting a new recipe.
+Never automatically retry an import after a timeout: first check whether Mealie
+created it. A failed follow-up fetch returns `created_slug` and `stage` for recovery.
+
 ### Updating Recipes
 
-**Full update:**
-```
-"Update the pasta recipe with these new ingredients:
+```text
+"Replace the pasta recipe's ingredients with:
 - 1 lb spaghetti
 - 2 cups marinara
 - Fresh basil
 
-And these instructions:
+And replace its instructions with:
 1. Boil pasta
 2. Heat sauce
 3. Combine and serve"
 ```
 
-**Partial update (PATCH):**
-```
-"Change the description of the meatloaf recipe to 'Family favorite comfort food'"
+```text
+"Change the meatloaf recipe's description to 'Family favorite comfort food'"
 "Update the yield of the soup recipe to '6 servings'"
 ```
 
-### Recipe Images
+Both content and metadata changes use `update_recipe`. Omitted fields stay
+unchanged; supplied ingredient and instruction lists replace those fields, and
+empty lists clear them.
 
-**From URL:**
-```
-"Set the recipe image for chocolate cake to https://example.com/cake.jpg"
+### Nutrition and Display Settings
+
+```text
+"Set the chicken curry's per-serving nutrition to: 520 calories,
+ 31g protein, 18g fat, 42g carbs, and 780mg sodium"
+"Show the nutrition card and uploaded assets on the chicken curry recipe"
 ```
 
-**From local file:**
+Mealie replaces the whole nutrition object, so include every value you want to
+keep. Display settings are merged instead: omitted toggles keep their current
+values. See the [nutrition](README.md#nutrition-is-replaced-not-merged) and
+[display settings](README.md#uploaded-assets-and-nutrition-can-be-stored-but-hidden)
+notes.
+
+### Parsing Ingredients
+
+```text
+"Parse these ingredients against my Mealie vocabulary, then create the recipe:
+- 1/4 cup chopped onion
+- 2 large eggs
+- a pinch of salt"
 ```
+
+`parse_ingredients` resolves all lines in one request and returns quantities,
+units, foods, and notes. Check low-confidence results and missing food or unit
+matches before creating the recipe.
+
+### Images and Assets
+
+```text
+"Set the chocolate cake recipe's image to https://example.com/cake.jpg"
 "Upload the image at /Users/me/Pictures/dish.jpg for the pasta recipe"
+"Attach /Users/me/Documents/recipe-notes.pdf to the pasta recipe"
 ```
 
-### Recipe Metadata
+Replace example URLs and paths with real ones. Files must be accessible to the
+server process; a remote or containerized server cannot read your desktop files
+unless you make them available there.
 
-**Mark as made:**
-```
+### Marking as Made and Deleting
+
+```text
 "Mark the chicken parmesan recipe as made today"
-"Update the last made date for lasagna"
-```
-
-**Delete recipe:**
-```
 "Delete the test recipe I just created"
 ```
 
----
+Marking a recipe as made updates its `lastMade` timestamp. It does not provide a
+count of how often the recipe was cooked.
 
 ## Shopping Lists
 
-### Creating & Managing Lists
+### Managing Lists
 
-**Create list:**
-```
+```text
 "Create a shopping list called 'Weekly Groceries'"
-"Make a new shopping list for Thanksgiving"
-```
-
-**View lists:**
-```
 "Show me all my shopping lists"
-"What shopping lists do I have?"
+"Rename 'Weekly Groceries' to 'Weekend Groceries'"
 ```
 
 ### Adding Items
 
-**Manual items:**
-```
-"Add eggs and milk to my shopping list"
-"Add these items to my grocery list:
+```text
+"Add these items to my Weekly Groceries list:
 - 2 lbs chicken breast
 - 1 dozen eggs
 - 2 cups rice"
+"Add all ingredients from the lasagna recipe to my Weekly Groceries list"
 ```
 
-**From recipes:**
-```
-"Add all ingredients from the lasagna recipe to my shopping list"
-"Add the ingredients from chicken soup to my Weekly Groceries list"
-```
+The assistant can use bulk creation for manual items and recipe integration for
+recipe ingredients.
 
-**Bulk creation:**
-```
-"Create 5 items on my shopping list at once:
-- Apples
-- Oranges
-- Bananas
-- Grapes
-- Strawberries"
-```
+### Updating and Removing Items
 
-### Managing Items
-
-**Check off items:**
-```
-"Mark eggs as checked on my shopping list"
-"Check off milk from the grocery list"
-```
-
-**Update items:**
-```
+```text
+"Check off milk on my Weekly Groceries list"
 "Change the quantity of chicken breast to 3 lbs"
-"Update the rice item to 'Basmati rice'"
+"Update the rice item's note to 'Basmati rice'"
+"Remove all checked items from my Weekly Groceries list"
 ```
 
-**Delete items:**
-```
-"Delete eggs from my shopping list"
-"Remove all checked items from my grocery list"
-```
-
-### Shopping List Workflows
-
-**Weekly meal prep:**
-```
-User: "I'm planning to make lasagna, chicken soup, and pasta this week.
-       Create a shopping list with all the ingredients."
-
-Claude: I'll help you create a comprehensive shopping list:
-        1. Creating "Weekly Meal Prep" list
-        2. Adding ingredients from lasagna recipe
-        3. Adding ingredients from chicken soup
-        4. Adding ingredients from pasta recipe
-        Done! Your list has 15 unique ingredients.
-```
-
-**Post-shopping cleanup:**
-```
-User: "I'm back from the store. Clear my shopping list."
-
-Claude: I'll delete all items from your shopping list.
-        [Deletes all checked items]
-        All done!
-```
-
----
+Single and bulk item updates preserve omitted fields. Be explicit about whether
+you want to delete checked items, all items, or the entire list.
 
 ## Meal Planning
 
-### Creating Meal Plans
+### Creating and Viewing Plans
 
-**Single meal:**
-```
+```text
 "Add the lasagna recipe to tomorrow's dinner"
 "Plan chicken soup for lunch on Friday"
+"What's for dinner tonight?"
+"Show me this week's meal plan"
 ```
 
-**Bulk planning:**
-```
+```text
 "Plan this week's dinners:
 - Monday: Lasagna
 - Tuesday: Chicken stir-fry
@@ -216,313 +215,130 @@ Claude: I'll delete all items from your shopping list.
 - Friday: Pizza"
 ```
 
-### Viewing Plans
+The assistant must resolve relative dates to `YYYY-MM-DD`. Entry types are
+`breakfast`, `lunch`, `dinner`, or `side`; each new entry needs a recipe or a
+nonblank title.
 
-**Today's plan:**
-```
-"What's for dinner tonight?"
-"Show me today's meal plan"
-```
+### Changing Plans
 
-**Weekly view:**
-```
-"Show me this week's meal plan"
-"What meals do I have planned for next week?"
+```text
+"Move Friday's pizza dinner to Saturday"
+"Replace tomorrow's dinner recipe with a title-only entry called 'Leftovers'"
+"Delete Sunday's lunch entry"
 ```
 
----
+To remove a recipe link, `update_mealplan` accepts `clear_recipe=True`. It cannot
+be combined with a replacement `recipe_id`.
 
 ## Organization
 
-### Categories
+### Categories and Tags
 
-**Create categories:**
-```
+```text
 "Create a category called 'Quick Dinners'"
-"Make categories for Breakfast, Lunch, Dinner, and Dessert"
-```
-
-**Find unused categories:**
-```
 "Which categories don't have any recipes?"
-"Show me empty categories"
-```
-
-**Organize recipes:**
-```
-"Add the pancake recipe to the Breakfast category"
-"Move lasagna to the Dinner category"
-```
-
-### Tags
-
-**Create tags:**
-```
+"Add the pancake recipe to the Breakfast category, keeping its other categories"
 "Create a tag called 'Quick Meals'"
-"Make tags for: Healthy, Family Favorite, Budget Friendly"
-```
-
-**Find and filter:**
-```
-"Show me all recipes tagged 'healthy'"
-"Find recipes with both 'quick' and 'easy' tags"
 "Which tags aren't being used?"
+"Add 'healthy' and 'quick' tags to the salad recipe, keeping its existing tags"
 ```
 
-**Tag recipes:**
-```
-"Add the 'healthy' and 'quick' tags to the salad recipe"
-"Tag the lasagna recipe as 'family favorite'"
+Search before creating organizers to avoid duplicates.
+`update_recipe_categories_and_tags` replaces each supplied ID list; omitted
+lists stay unchanged, and empty lists clear them. To add a category or tag, the
+assistant must include the recipe's existing IDs in the replacement list.
+
+### Foods, Units, and Kitchen Tools
+
+```text
+"Find the food entry for chickpeas"
+"Show me the available measurement units"
+"Create a kitchen tool called 'Stand mixer'"
 ```
 
----
+Foods and units provide references for structured recipe ingredients. Kitchen
+tools represent equipment, not MCP operations.
 
 ## Advanced Workflows
 
 ### Weekly Meal Planning with Shopping
 
-```
-User: "Help me plan this week's meals and create a shopping list"
-
-Claude: I'll help you plan the week:
-
-        1. What meals would you like? [User provides list]
-
-        2. Creating meal plan entries for Monday-Friday
-
-        3. Creating "Weekly Shopping List"
-
-        4. Adding ingredients from all 5 recipes to the list
-
-        5. Consolidating duplicate ingredients
-
-        Done! You have:
-        - 5 meals planned
-        - 1 shopping list with 23 items
+```text
+"Help me plan this week's dinners and create a shopping list for those recipes"
 ```
 
-### Recipe Collection Management
+A typical sequence is:
 
-**Find and clean up:**
-```
-User: "Find all recipes I haven't made in over a year"
+1. Choose recipes and resolve their IDs.
+2. Create meal plan entries for the agreed dates.
+3. Create a shopping list.
+4. Add each recipe's ingredients.
+5. Review the resulting quantities and any duplicate items.
 
-Claude: Searching for recipes with lastMade dates over 1 year ago...
-        Found 12 recipes. Would you like me to:
-        - Delete them?
-        - Tag them as "Rarely Made"?
-        - Create a report?
-```
+Bulk meal-plan creation and recipe creation use multiple API requests. On a
+failure, inspect the reported completed work before retrying; see
+[partial-write recovery](README.md#recovering-from-partially-completed-writes).
 
-**Organize by usage:**
-```
-User: "Show me my most-made recipes this year"
+### Scaling Recipe Ingredients
 
-Claude: Sorting recipes by lastMade date...
-        Your top 10 most-made recipes:
-        1. Spaghetti Carbonara (made 15 times)
-        2. Chicken Stir-Fry (made 12 times)
-        ...
+```text
+"I'm cooking for 8, and my lasagna serves 4.
+ Add its ingredients to my Dinner Party shopping list at double quantity."
 ```
 
-### Smart Shopping Lists
+After checking the recipe's yield, the assistant can call
+`add_recipe_to_shopping_list` with `recipe_increment_quantity=2.0`.
 
-**Recipe-based shopping:**
-```
-User: "I'm making a dinner party for 8. I want to make lasagna (serves 4).
-       Add the ingredients to my shopping list with doubled quantities."
+### Reviewing Older Recipes
 
-Claude: 1. Getting lasagna recipe
-        2. Creating shopping list "Dinner Party"
-        3. Adding ingredients with 2x multiplier
-        Done! List ready with adjusted quantities.
+```text
+"Review the last-made dates of my recipes and suggest some I haven't made lately"
+"Find recipes with 'test' in the name and show me the matches before deleting any"
 ```
 
-**Budget tracking:**
-```
-User: "Create a shopping list for this week's meals and estimate the cost"
+`lastMade` indicates recency, not cooking frequency. These tools do not expose
+purchase history, price estimates, or pantry inventory.
 
-Claude: [Note: Price data would need to be in Mealie]
-        Creating shopping list from meal plan...
-        Estimated total: $XX.XX based on previous purchases
-```
+## Best Practices
 
-### Batch Operations
-
-**Recipe cleanup:**
-```
-User: "Delete all test recipes I created today"
-
-Claude: Searching for recipes created today with "test" in the name...
-        Found 3 test recipes. Deleting:
-        - Test Recipe 1
-        - Test Recipe 2
-        - Test Recipe 3
-        All cleaned up!
-```
-
-**Category reorganization:**
-```
-User: "Find all breakfast recipes and make sure they're in the Breakfast category"
-
-Claude: Searching for breakfast-related recipes...
-        Found 15 recipes. Updating categories...
-        Done! All breakfast recipes now categorized.
-```
-
-### Integration Workflows
-
-**From recipe to table:**
-```
-1. "Find a chicken recipe for tonight"
-2. "Add it to today's dinner plan"
-3. "Add the ingredients to my shopping list"
-4. [After cooking] "Mark it as made"
-5. "Rate it 5 stars" [if rating is implemented]
-```
-
-**Weekly meal prep:**
-```
-1. "Show me quick recipes with chicken"
-2. "Plan these 3 recipes for this week"
-3. "Create a shopping list from the meal plan"
-4. [After shopping] "Check off all items I bought"
-5. [After cooking each meal] "Mark as made"
-```
-
----
-
-## Tips & Best Practices
-
-### 1. Use Slugs for Filtering
-
-❌ **Don't:**
-```
-"Show me recipes tagged 'Quick Meals'"
-```
-
-✅ **Do:**
-```
-"First show me the tags, then filter by the slug"
-```
-
-### 2. Batch Similar Operations
-
-❌ **Don't:**
-```
-"Add eggs to shopping list"
-"Add milk to shopping list"
-"Add bread to shopping list"
-```
-
-✅ **Do:**
-```
-"Add eggs, milk, and bread to shopping list"
-```
-
-### 3. Be Specific with Updates
-
-❌ **Don't:**
-```
-"Update the recipe" [vague]
-```
-
-✅ **Do:**
-```
-"Change the description to 'Family favorite' and update the yield to 6 servings"
-```
-
-### 4. Use Recipe Integration
-
-❌ **Don't:**
-```
-"Manually add all ingredients from lasagna to shopping list"
-```
-
-✅ **Do:**
-```
-"Add lasagna recipe ingredients to shopping list"
-```
-
-### 5. Leverage Search Before Creating
-
-❌ **Don't:**
-```
-"Create a tag called 'healthy'"
-```
-
-✅ **Do:**
-```
-"Show me all tags first" [check if 'healthy' already exists]
-```
-
----
-
-## Common Patterns
-
-### Morning Routine
-```
-"What's on the meal plan for today?"
-"Add ingredients for tonight's dinner to my shopping list"
-```
-
-### After Shopping
-```
-"Check off all items on my shopping list"
-"Delete checked items"
-```
-
-### Weekly Planning
-```
-"Show me recipes I haven't made in a while"
-"Plan those for this week"
-"Create shopping list from meal plan"
-```
-
-### Recipe Discovery
-```
-"Find recipes with chicken and pasta"
-"Show me quick dinner recipes"
-"What recipes can I make with the ingredients I have?" [if inventory is tracked]
-```
-
----
+- Resolve slugs and IDs before filtering or updating.
+- Group similar shopping-item and meal-plan writes using the bulk tools.
+- Specify which fields should change and whether existing lists should be kept.
+- Use recipe-to-shopping-list integration instead of manually copying ingredients.
+- Review imports and parsed ingredients before relying on their results.
+- Review the target records before destructive operations.
+- Inspect the current state after a failed write instead of blindly retrying.
 
 ## Troubleshooting
 
-### "No recipes found" when filtering
+### No Recipes Found When Filtering
 
-**Problem:** Using display name instead of slug
+Look up the tag or category and use its slug or UUID, not its display name.
+Check whether you requested AND or OR matching when using multiple filters.
 
-**Solution:**
-```
-Step 1: "Show me all tags"
-Step 2: Note the slug (e.g., "quick-meals")
-Step 3: "Filter recipes by tag slug 'quick-meals'"
-```
+### Nutrition or Assets Are Missing in Mealie
 
-### Shopping list item updates clearing fields
+Check the recipe's `showNutrition` and `showAssets` settings. Content can be
+stored successfully while its UI card is hidden.
 
-**Fixed!** The server now preserves all fields automatically.
+### Shopping Item Fields Disappear After an Update
 
-```
-"Update item to checked: true"
-[Note, quantity, etc. are preserved]
-```
+Updates preserve omitted fields. Check whether the request explicitly supplied
+values for fields you meant to keep. See
+[field preservation](README.md#field-preservation) for bulk-input conventions.
 
-### Delete operations returning errors
+### A Delete Returns No Data
 
-**Fixed!** The server now handles empty/null responses correctly.
+A successful empty or JSON-null API response is normalized to a structured
+success response. HTTP failures still surface as errors; no response body alone
+is not a failure.
 
-```
-"Delete the category"
-[Returns success message even with null response]
-```
+### A Tool Name Is No Longer Available
 
----
+Refresh the client's tool list and update saved calls using the
+[migration table](README.md#migrating-consolidated-tools-breaking-change).
 
 ## See Also
 
-- [README.md](README.md) - Installation and setup
-- [CHANGELOG.md](CHANGELOG.md) - Version history
-- [API_COVERAGE.md](API_COVERAGE.md) - Detailed API coverage
+- [README](README.md) - Installation, configuration, and tool reference
+- [Changelog](CHANGELOG.md) - Changes and migration notes

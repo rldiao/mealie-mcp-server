@@ -48,7 +48,7 @@ class CategoriesMixin:
 
         params = format_api_params(param_dict)
 
-        logger.info({"message": "Retrieving categories", "parameters": params})
+        logger.info({"message": "Retrieving categories"})
         return self._handle_request("GET", "/api/organizers/categories", params=params)
 
     def get_empty_categories(self) -> List[Dict[str, Any]]:
@@ -74,7 +74,7 @@ class CategoriesMixin:
 
         payload = {"name": name}
 
-        logger.info({"message": "Creating category", "name": name})
+        logger.info({"message": "Creating category"})
         return self._handle_request("POST", "/api/organizers/categories", json=payload)
 
     def get_category(self, category_id: str) -> Dict[str, Any]:
@@ -89,7 +89,7 @@ class CategoriesMixin:
         if not category_id:
             raise ValueError("Category ID cannot be empty")
 
-        logger.info({"message": "Retrieving category", "category_id": category_id})
+        logger.info({"message": "Retrieving category"})
         return self._handle_request("GET", f"/api/organizers/categories/{category_id}")
 
     def get_category_by_slug(self, category_slug: str) -> Dict[str, Any]:
@@ -104,7 +104,7 @@ class CategoriesMixin:
         if not category_slug:
             raise ValueError("Category slug cannot be empty")
 
-        logger.info({"message": "Retrieving category by slug", "category_slug": category_slug})
+        logger.info({"message": "Retrieving category by slug"})
         return self._handle_request("GET", f"/api/organizers/categories/slug/{category_slug}")
 
     def update_category(self, category_id: str, category_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -122,7 +122,7 @@ class CategoriesMixin:
         if not category_data:
             raise ValueError("Category data cannot be empty")
 
-        logger.info({"message": "Updating category", "category_id": category_id})
+        logger.info({"message": "Updating category"})
         return self._handle_request("PUT", f"/api/organizers/categories/{category_id}", json=category_data)
 
     def delete_category(self, category_id: str) -> Dict[str, Any]:
@@ -137,5 +137,5 @@ class CategoriesMixin:
         if not category_id:
             raise ValueError("Category ID cannot be empty")
 
-        logger.info({"message": "Deleting category", "category_id": category_id})
+        logger.info({"message": "Deleting category"})
         return self._handle_request("DELETE", f"/api/organizers/categories/{category_id}")

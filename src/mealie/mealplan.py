@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Dict, List, Optional
 
+from models.mealplan import MealPlanDateRange, MealPlanEntry, MealPlanUpdate
 from utils import format_api_params
 
 logger = logging.getLogger("mealie-mcp")
@@ -30,16 +31,17 @@ class MealplanMixin:
         Raises:
             MealieApiError: If the API request fails
         """
+        dates = MealPlanDateRange(start_date=start_date, end_date=end_date)
         param_dict = {
-            "startDate": start_date,
-            "endDate": end_date,
+            "start_date": dates.start_date,
+            "end_date": dates.end_date,
             "page": page,
             "perPage": per_page,
         }
 
         params = format_api_params(param_dict)
 
-        logger.info({"message": "Retrieving mealplans", "parameters": params})
+        logger.info({"message": "Retrieving mealplans"})
         response = self._handle_request(
             "GET", "/api/households/mealplans", params=params
         )
@@ -67,45 +69,45 @@ class MealplanMixin:
             ValueError: If neither recipe_id nor title is provided
             MealieApiError: If the API request fails
         """
-        if not recipe_id and not title:
-            raise ValueError("Either recipe_id or title must be provided")
-        if not date:
-            raise ValueError("Date cannot be empty")
+        entry = MealPlanEntry(
+            date=date, recipe_id=recipe_id, title=title, entry_type=entry_type
+        )
 
         # Build the request payload
         payload = {
-            "date": date,
-            "entryType": entry_type,
+            "date": entry.date,
+            "entryType": entry.entry_type,
         }
 
-        if recipe_id:
-            payload["recipeId"] = recipe_id
-        if title:
-            payload["title"] = title
+        if entry.recipe_id:
+            payload["recipeId"] = entry.recipe_id
+        if entry.title:
+            payload["title"] = entry.title
 
-        logger.info(
-            {
-                "message": "Creating mealplan entry",
-                "date": date,
-                "entry_type": entry_type,
-            }
-        )
+        logger.info({"message": "Creating mealplan entry"})
         return self._handle_request("POST", "/api/households/mealplans", json=payload)
 
     def update_mealplan(
         self, entry_id: str, entry_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Update an entry while preserving fields required by Mealie's PUT."""
-        if not entry_id:
+        if not entry_id or not entry_id.strip():
             raise ValueError("Mealplan entry ID cannot be empty")
-        if not entry_data:
-            raise ValueError("Mealplan entry data cannot be empty")
+        patch = MealPlanUpdate.model_validate(entry_data).model_dump(
+            by_alias=True, exclude_unset=True
+        )
 
-        logger.info({"message": "Updating mealplan entry", "entry_id": entry_id})
+        logger.info({"message": "Updating mealplan entry"})
         current_entry = self._handle_request(
             "GET", f"/api/households/mealplans/{entry_id}"
         )
-        merged_data = {**current_entry, **entry_data}
+        merged_data = {**current_entry, **patch}
+        MealPlanEntry(
+            date=merged_data.get("date"),
+            recipe_id=merged_data.get("recipeId"),
+            title=merged_data.get("title"),
+            entry_type=merged_data.get("entryType", "breakfast"),
+        )
         return self._handle_request(
             "PUT", f"/api/households/mealplans/{entry_id}", json=merged_data
         )
@@ -123,10 +125,10 @@ class MealplanMixin:
             ValueError: If item_id is empty
             MealieApiError: If the API request fails
         """
-        if not item_id:
+        if not item_id or not item_id.strip():
             raise ValueError("Mealplan entry ID cannot be empty")
 
-        logger.info({"message": "Deleting mealplan entry", "item_id": item_id})
+        logger.info({"message": "Deleting mealplan entry"})
         return self._handle_request("DELETE", f"/api/households/mealplans/{item_id}")
 
     def get_todays_mealplan(self) -> List[Dict[str, Any]]:

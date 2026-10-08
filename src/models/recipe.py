@@ -43,7 +43,7 @@ class IngredientFood(MealieResponseModel):
 
 
 class RecipeIngredient(MealieResponseModel):
-    quantity: Optional[float] = None
+    quantity: Optional[float] = Field(default=None, allow_inf_nan=False)
     unit: Optional[IngredientUnit] = None
     food: Optional[IngredientFood] = None
     note: Optional[str] = None
@@ -70,17 +70,88 @@ class RecipeInstruction(MealieResponseModel):
 
 
 class RecipeNutrition(MealieResponseModel):
-    calories: Optional[str] = None
-    carbohydrateContent: Optional[str] = None
-    cholesterolContent: Optional[str] = None
-    fatContent: Optional[str] = None
-    fiberContent: Optional[str] = None
-    proteinContent: Optional[str] = None
-    saturatedFatContent: Optional[str] = None
-    sodiumContent: Optional[str] = None
-    sugarContent: Optional[str] = None
-    transFatContent: Optional[str] = None
-    unsaturatedFatContent: Optional[str] = None
+    """Per-serving nutrition values.
+
+    Mealie stores every value as a string holding a bare number, without a unit
+    suffix: calories in kcal, sodium and cholesterol in milligrams, everything
+    else in grams. Numbers are accepted and converted to strings.
+
+    Mealie replaces the whole nutrition object on write, so omitted keys are
+    cleared rather than preserved.
+    """
+
+    model_config = ConfigDict(extra="allow", coerce_numbers_to_str=True)
+
+    calories: Optional[str] = Field(default=None, description="Energy in kcal.")
+    carbohydrateContent: Optional[str] = Field(
+        default=None, description="Carbohydrates in grams."
+    )
+    cholesterolContent: Optional[str] = Field(
+        default=None, description="Cholesterol in milligrams."
+    )
+    fatContent: Optional[str] = Field(default=None, description="Total fat in grams.")
+    fiberContent: Optional[str] = Field(
+        default=None, description="Dietary fiber in grams."
+    )
+    proteinContent: Optional[str] = Field(default=None, description="Protein in grams.")
+    saturatedFatContent: Optional[str] = Field(
+        default=None, description="Saturated fat in grams."
+    )
+    sodiumContent: Optional[str] = Field(
+        default=None, description="Sodium in milligrams."
+    )
+    sugarContent: Optional[str] = Field(default=None, description="Sugars in grams.")
+    transFatContent: Optional[str] = Field(
+        default=None, description="Trans fat in grams."
+    )
+    unsaturatedFatContent: Optional[str] = Field(
+        default=None, description="Unsaturated fat in grams."
+    )
+
+
+class RecipeSettingsInput(BaseModel):
+    """Display toggles accepted by the create/update recipe tools.
+
+    Every field is optional: only the toggles you pass are changed, the rest
+    keep their current value. Mealie seeds a new recipe's settings from the
+    household preferences (`recipeShowAssets`, `recipeShowNutrition`, and
+    friends), so the defaults differ per instance.
+    """
+
+    public: Optional[bool] = Field(
+        default=None,
+        description="Make the recipe readable without logging in.",
+    )
+    showNutrition: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Render the nutrition card. Nutrition values are stored either way, "
+            "but stay hidden in the UI while this is false."
+        ),
+    )
+    showAssets: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Render the assets card. Uploaded assets are stored either way, but "
+            "stay hidden in the UI while this is false."
+        ),
+    )
+    landscapeView: Optional[bool] = Field(
+        default=None, description="Use the landscape recipe layout."
+    )
+    disableComments: Optional[bool] = Field(
+        default=None, description="Hide the comments section."
+    )
+    disableAmount: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Hide ingredient quantities and units. Not present on every Mealie "
+            "version; ignored where absent."
+        ),
+    )
+    locked: Optional[bool] = Field(
+        default=None, description="Prevent other users from editing the recipe."
+    )
 
 
 class RecipeSettings(MealieResponseModel):
@@ -113,39 +184,39 @@ class RecipeTool(MealieResponseModel):
 
 
 class Recipe(MealieResponseModel):
-    id: str
+    id: Optional[str] = None
     userId: str
     householdId: str
     groupId: str
-    name: str
+    name: Optional[str] = None
     slug: str
-    image: Optional[str] = None
-    recipeServings: Optional[int] = None
-    recipeYieldQuantity: Optional[int] = 0
+    image: Any = None
+    recipeServings: Optional[float] = None
+    recipeYieldQuantity: Optional[float] = 0
     recipeYield: Optional[str] = None
     totalTime: Optional[str] = None
     prepTime: Optional[str] = None
     cookTime: Optional[str] = None
     performTime: Optional[str] = None
     description: Optional[str] = None
-    recipeCategory: List[RecipeCategory] = Field(default_factory=list)
-    tags: List[RecipeTag] = Field(default_factory=list)
+    recipeCategory: Optional[List[RecipeCategory]] = Field(default_factory=list)
+    tags: Optional[List[RecipeTag]] = Field(default_factory=list)
     tools: List[RecipeTool] = Field(default_factory=list)
     rating: Optional[float] = None
     orgURL: Optional[str] = None
-    dateAdded: str
-    dateUpdated: str
-    createdAt: str
-    updatedAt: str
+    dateAdded: Optional[str] = None
+    dateUpdated: Optional[str] = None
+    createdAt: Optional[str] = None
+    updatedAt: Optional[str] = None
     lastMade: Optional[str] = None
     recipeIngredient: List[RecipeIngredient] = Field(default_factory=list)
-    recipeInstructions: List[RecipeInstruction] = Field(default_factory=list)
-    nutrition: RecipeNutrition = Field(default_factory=RecipeNutrition)
-    settings: RecipeSettings = Field(default_factory=RecipeSettings)
-    assets: List[Any] = Field(default_factory=list)
-    notes: List[Any] = Field(default_factory=list)
-    extras: Dict[str, Any] = Field(default_factory=dict)
-    comments: List[Any] = Field(default_factory=list)
+    recipeInstructions: Optional[List[RecipeInstruction]] = Field(default_factory=list)
+    nutrition: Optional[RecipeNutrition] = Field(default_factory=RecipeNutrition)
+    settings: Optional[RecipeSettings] = Field(default_factory=RecipeSettings)
+    assets: Optional[List[Any]] = Field(default_factory=list)
+    notes: Optional[List[Any]] = Field(default_factory=list)
+    extras: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    comments: Optional[List[Any]] = Field(default_factory=list)
 
 
 class RecipeIngredientSubstitutionInput(BaseModel):
@@ -266,7 +337,7 @@ class RecipeIngredientInput(BaseModel):
         ),
     )
     quantity: Optional[float] = Field(
-        default=None, description="Numeric amount, e.g. 200."
+        default=None, allow_inf_nan=False, description="Numeric amount, e.g. 200."
     )
     unit: Optional[Dict[str, Any]] = Field(
         default=None,
@@ -308,7 +379,19 @@ class RecipeInstructionInput(BaseModel):
 
     text: str = Field(description="The instruction text for this step.")
     title: Optional[str] = Field(
-        default=None, description="Optional heading for this step or section."
+        default=None,
+        description=(
+            "Section heading rendered as a separate banner above this step. "
+            "It does not replace the 'Step N' label, which stays below it. "
+            "Use summary for a plain per-step heading."
+        ),
+    )
+    summary: Optional[str] = Field(
+        default=None,
+        description=(
+            "Short heading shown in place of the 'Step N' label on this step. "
+            "Mealie only renders the step number when this is empty."
+        ),
     )
     ingredientReferences: Optional[List[IngredientReference]] = Field(
         default=None,

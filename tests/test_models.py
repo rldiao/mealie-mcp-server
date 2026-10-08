@@ -10,6 +10,7 @@ from models.recipe import (
     RecipeIngredientInput,
     RecipeIngredientSubstitutionInput,
     RecipeInstructionInput,
+    RecipeNutrition,
 )
 
 
@@ -84,6 +85,14 @@ def test_recipe_instruction_input_serialisation():
     assert step.ingredientReferences[0].referenceId == "r1"
 
 
+def test_recipe_instruction_input_carries_summary():
+    step = RecipeInstructionInput(text="Do it", summary="Prep")
+    dumped = step.model_dump(exclude_none=True)
+    assert dumped["summary"] == "Prep"
+    # title stays independent of summary: the two render differently in Mealie
+    assert "title" not in dumped
+
+
 def test_organizer_ref_requires_id_and_name():
     org = OrganizerRef(id="t1", name="Quick")
     assert org.model_dump(exclude_none=True) == {"id": "t1", "name": "Quick"}
@@ -140,3 +149,58 @@ def test_recipe_round_trip_keeps_unmodelled_mealie_fields():
     )
     assert ing["referencedRecipe"] == {"id": "r", "slug": "dressing"}
     assert ing["anotherNewField"] == 1
+
+
+def test_recipe_nutrition_coerces_numbers_to_strings():
+    nutrition = RecipeNutrition(calories=450, fatContent=31.5)
+    assert nutrition.calories == "450"
+    assert nutrition.fatContent == "31.5"
+    assert nutrition.model_dump(exclude_none=True) == {
+        "calories": "450",
+        "fatContent": "31.5",
+    }
+
+
+@pytest.mark.parametrize("field", ["recipeServings", "recipeYieldQuantity"])
+def test_recipe_accepts_fractional_quantities(field):
+    recipe = Recipe.model_validate({**BASE_RECIPE, field: 2.5})
+    assert getattr(recipe, field) == 2.5
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "id",
+        "name",
+        "dateAdded",
+        "dateUpdated",
+        "createdAt",
+        "updatedAt",
+        "recipeCategory",
+        "tags",
+        "recipeInstructions",
+        "nutrition",
+        "settings",
+        "assets",
+        "notes",
+        "extras",
+        "comments",
+    ],
+)
+def test_recipe_accepts_api_nullable_fields(field):
+    recipe = Recipe.model_validate({**BASE_RECIPE, field: None})
+    assert getattr(recipe, field) is None
+
+
+@pytest.mark.parametrize("missing", ["id", "name"])
+def test_organizer_ref_rejects_missing_required_fields(missing):
+    data = {"id": "a0819c33-1a5e-4374-9151-ed85160c0049", "name": "Quick"}
+    del data[missing]
+    with pytest.raises(ValidationError):
+        OrganizerRef.model_validate(data)
+
+
+@pytest.mark.parametrize("quantity", [float("inf"), float("-inf"), float("nan")])
+def test_ingredient_rejects_nonfinite_quantity(quantity):
+    with pytest.raises(ValidationError):
+        RecipeIngredientInput(quantity=quantity)

@@ -3,6 +3,8 @@ from typing import Any, Dict, Optional
 
 from utils import format_api_params
 
+from .updates import merge_replacement_record
+
 logger = logging.getLogger("mealie-mcp")
 
 
@@ -35,7 +37,7 @@ class UnitsMixin:
         }
         params = format_api_params(param_dict)
 
-        logger.info({"message": "Retrieving units", "parameters": params})
+        logger.info({"message": "Retrieving units"})
         return self._handle_request("GET", "/api/units", params=params)
 
     def create_unit(
@@ -67,7 +69,7 @@ class UnitsMixin:
         if description is not None:
             payload["description"] = description
 
-        logger.info({"message": "Creating unit", "name": name})
+        logger.info({"message": "Creating unit"})
         return self._handle_request("POST", "/api/units", json=payload)
 
     def get_unit(self, unit_id: str) -> Dict[str, Any]:
@@ -82,7 +84,7 @@ class UnitsMixin:
         if not unit_id:
             raise ValueError("Unit ID cannot be empty")
 
-        logger.info({"message": "Retrieving unit", "unit_id": unit_id})
+        logger.info({"message": "Retrieving unit"})
         return self._handle_request("GET", f"/api/units/{unit_id}")
 
     def update_unit(self, unit_id: str, unit_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -90,7 +92,8 @@ class UnitsMixin:
 
         Mealie's PUT replaces the whole record, so we fetch the existing unit
         and merge the provided fields over it (preserving unset fields and
-        keeping the required ``id``/``name`` in the body).
+        keeping the required ``name`` and existing ``id`` in the body).
+        An invalid or incomplete read is rejected before issuing the PUT.
 
         Args:
             unit_id: The UUID of the unit to update
@@ -105,9 +108,9 @@ class UnitsMixin:
             raise ValueError("Unit data cannot be empty")
 
         existing = self.get_unit(unit_id)
-        merged = {**existing, **unit_data} if isinstance(existing, dict) else unit_data
+        merged = merge_replacement_record(existing, unit_data)
 
-        logger.info({"message": "Updating unit", "unit_id": unit_id})
+        logger.info({"message": "Updating unit"})
         return self._handle_request("PUT", f"/api/units/{unit_id}", json=merged)
 
     def delete_unit(self, unit_id: str) -> Dict[str, Any]:
@@ -122,5 +125,5 @@ class UnitsMixin:
         if not unit_id:
             raise ValueError("Unit ID cannot be empty")
 
-        logger.info({"message": "Deleting unit", "unit_id": unit_id})
+        logger.info({"message": "Deleting unit"})
         return self._handle_request("DELETE", f"/api/units/{unit_id}")

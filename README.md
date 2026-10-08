@@ -1,78 +1,86 @@
-[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/rldiao-mealie-mcp-server-badge.png)](https://mseep.ai/app/rldiao-mealie-mcp-server)
-
 # Mealie MCP Server
 
-A comprehensive Model Context Protocol (MCP) server that enables AI assistants to interact with your [Mealie](https://github.com/mealie-recipes/mealie) recipe database through clients like Claude Desktop.
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/rldiao-mealie-mcp-server-badge.png)](https://mseep.ai/app/rldiao-mealie-mcp-server)
 
-## ✨ Features
+A Model Context Protocol (MCP) server that connects AI assistants to your
+[Mealie](https://github.com/mealie-recipes/mealie) recipe database through clients
+such as Claude Desktop.
 
-### 🍽️ Recipe Management
+## Contents
 
-- **CRUD Operations**: Create, read, update, patch, duplicate, and delete recipes
-- **URL Import**: Import recipes from websites using Mealie's built-in scraper
-- **Full Recipe Content**: Write structured ingredients (with substitutions), instructions, notes, timings, servings, and nutrition (macros)
-- **Advanced Search**: Filter by text, categories, tags, and tools with AND/OR logic
-- **Image Management**: Upload images or scrape from URLs
-- **Asset Uploads**: Attach documents and files to recipes
-- **Metadata Tracking**: Mark recipes as made, track last made dates
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Remote Access](#remote-access)
+- [Docker](#docker)
+- [Usage Examples](#usage-examples)
+- [Available Tools](#available-tools)
+- [Development](#development)
+- [Important Notes](#important-notes)
+- [Support and Contributing](#support-and-contributing)
+- [License and Credits](#license-and-credits)
 
-### 🛒 Shopping Lists
+## Features
 
-- **List Management**: Create, update, and delete shopping lists
-- **Item Operations**: Add, update, check off, and remove items
-- **Bulk Operations**: Create, update, or delete multiple items at once
-- **Recipe Integration**: Automatically add recipe ingredients to shopping lists
+- **Recipes:** Create, read, update, import, duplicate, and delete recipes.
+- **Search:** Filter by text, categories, tags, and tools with AND/OR logic.
+- **Images and assets:** Upload recipe images and files, or set images from URLs.
+- **Nutrition and display:** Set per-serving nutrition (only the values you
+  pass change) and recipe visibility settings such as `showAssets` and
+  `showNutrition`.
+- **Notes and substitutions:** Write the recipe Notes panel and per-ingredient
+  substitutes; rewriting ingredients keeps existing substitutions.
+- **Ingredients:** Resolve free-text ingredients against Mealie's food and unit
+  vocabulary.
+- **Shopping lists:** Manage lists and items, perform bulk operations, and add
+  recipe ingredients with quantity scaling.
+- **Organization:** Manage categories, tags, foods, units, and recipe tools; find
+  unused categories and tags; add tags to a recipe by name.
+- **Foods and labels:** Manage food aliases and on-hand status, and apply
+  shopping-list labels to foods individually or in bulk by name.
+- **Meal planning:** View, create, update, and delete meal plan entries, create
+  multiple entries, and mark recipes as made today.
 
-### 🏷️ Organization
-
-- **Categories**: Organize recipes with categories (Breakfast, Dinner, etc.)
-- **Tags**: Tag recipes for easy filtering (Quick, Healthy, Family Favorite)
-- **Advanced Filtering**: Search and filter with full pagination support
-- **Empty Detection**: Find unused categories and tags
-- **Recipe Tools**: Manage kitchen equipment (e.g. Dutch oven, stand mixer)
-
-### 🥕 Foods, Units & Labels
-
-- **Foods**: Manage the ingredient library, aliases, and on-hand status
-- **Labels**: Create labels and apply them to foods individually or in bulk by name
-- **Units**: Manage measurement units used by structured ingredients
-
-### 📅 Meal Planning
-
-- **Meal Plans**: View, create, update, and delete meal plan entries
-- **Bulk Creation**: Add multiple meals at once
-- **Today's Menu**: Quick access to today's planned meals
-
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
 - Python 3.12+
-- Running Mealie instance with API key
+- A running Mealie instance and an API key from your account settings
 - Package manager [uv](https://docs.astral.sh/uv/getting-started/installation/)
 
 ### Installation
 
-#### Option 1: Using the MCP CLI
+#### Option 1: Using the MCP SDK CLI (Recommended)
 
-From a clone of this repository, install the server into Claude Desktop with the MCP SDK's CLI:
+Clone the repository, then install the server into Claude Desktop with the
+`mcp` command supplied by the Python MCP SDK (no standalone `fastmcp` package
+is needed):
 
 ```bash
-uv run mcp install src/server.py \
-  -v MEALIE_BASE_URL=https://your-mealie-instance.com \
-  -v MEALIE_API_KEY=your-mealie-api-key
+git clone https://github.com/rldiao/mealie-mcp-server.git
+cd mealie-mcp-server
+uv sync --locked
+uv run mcp install src/server.py --with-editable . \
+  --env-var MEALIE_BASE_URL=https://your-mealie-instance.com \
+  --env-var MEALIE_API_KEY=your-mealie-api-key
 ```
 
 #### Option 2: Using uvx
 
-Run directly from GitHub without cloning:
+Add this to your MCP client's configuration to run directly from GitHub without
+cloning (in Claude Desktop, use `claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "mealie-mcp-server": {
       "command": "uvx",
-      "args": ["git+https://github.com/rldiao/mealie-mcp-server"],
+      "args": [
+        "--from",
+        "git+https://github.com/rldiao/mealie-mcp-server",
+        "mealie-mcp-server"
+      ],
       "env": {
         "MEALIE_BASE_URL": "https://your-mealie-instance.com",
         "MEALIE_API_KEY": "your-mealie-api-key"
@@ -84,81 +92,131 @@ Run directly from GitHub without cloning:
 
 Restart Claude Desktop to load the server.
 
-### Configuration
+## Configuration
 
-| Variable | Required | Description |
+Set environment variables in your MCP client configuration or shell. For a local
+checkout, you can also copy [`.env.template`](.env.template) to `.env` and fill in
+your instance details. Never commit your API key.
+
+| Variable | Default | Description |
 | --- | --- | --- |
-| `MEALIE_BASE_URL` | Yes | Base URL of your Mealie instance, including protocol and port |
-| `MEALIE_API_KEY` | Yes | API token generated in your Mealie user settings |
-| `LOG_LEVEL` | No | Logging level (default `INFO`). Logs go to stderr. |
+| `MEALIE_BASE_URL` | Required | Mealie base URL, including protocol and port if needed |
+| `MEALIE_API_KEY` | Required | API key from your Mealie account settings |
+| `MEALIE_ENABLE_AI_IMPORT` | `false` | Opt in to AI recipe import; accepts `true`/`false` (case-insensitive) |
+| `MCP_TRANSPORT` | `stdio` | `stdio`, `streamable-http`, or legacy `sse` |
+| `MCP_HOST` | `127.0.0.1` | HTTP bind address; use `0.0.0.0` in containers |
+| `MCP_PORT` | `8765` | HTTP port, from 1 to 65535 |
+| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL` |
 
-The server checks Mealie's health on startup and exits if the instance is unreachable or the API key is rejected.
+## Remote Access
 
-## 📖 Usage Examples
+The default stdio transport is for local clients. To serve HTTP clients, configure
+your Mealie credentials as described above and run from the checkout:
 
-### Recipe Operations
-
+```bash
+export MCP_TRANSPORT=streamable-http
+export MCP_HOST=127.0.0.1
+export MCP_PORT=8765
+uv run mealie-mcp-server
 ```
+
+The server will expose its MCP endpoint at `http://<host>:<port>/mcp`.
+
+**Security:** HTTP transports have no built-in authentication. Anyone who can
+reach the endpoint can use the configured Mealie credentials through its tools.
+Keep it on a trusted interface; for remote access, use a reverse proxy that
+enforces authentication and HTTPS.
+
+## Docker
+
+The [Dockerfile](Dockerfile) runs the server as a persistent container.
+
+### Build
+
+```bash
+docker build -t mealie-mcp-server .
+```
+
+### Standalone
+
+```bash
+docker run -d \
+  --name mealie-mcp \
+  -e MEALIE_BASE_URL=http://your-mealie-host:9000 \
+  -e MEALIE_API_KEY=your-mealie-api-key \
+  -e MCP_TRANSPORT=streamable-http \
+  -e MCP_HOST=0.0.0.0 \
+  -e MCP_PORT=8765 \
+  -p 127.0.0.1:8765:8765 \
+  mealie-mcp-server
+```
+
+The port is published only on the host's loopback interface. See
+[Remote Access](#remote-access) before making it reachable remotely.
+
+### Docker Compose
+
+Add this service to the Compose file that runs Mealie. The example assumes that
+the Mealie service is named `mealie` and both services use a network named
+`mealie_net`, defined in that Compose file. Set `MEALIE_API_KEY` in the shell or
+Compose `.env` file.
+
+```yaml
+services:
+  mealie-mcp:
+    build: .
+    container_name: mealie-mcp
+    restart: unless-stopped
+    environment:
+      MEALIE_BASE_URL: http://mealie:9000
+      MEALIE_API_KEY: ${MEALIE_API_KEY}
+      MCP_TRANSPORT: streamable-http
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "8765"
+    expose:
+      - "8765"
+    networks:
+      - mealie_net
+```
+
+`expose` does not publish a host port. Connect a reverse proxy on the same network
+for remote access, following the [HTTP security guidance](#remote-access).
+
+## Usage Examples
+
+```text
 "Search for chicken recipes"
 "Create a new recipe for pasta carbonara"
-"Import the recipe at https://example.com/best-lasagna"
-"Add a note to the chilli recipe saying it freezes well"
-"Set the macros for the duck ragu to 520 kcal and 32 g protein per serving"
-"Duplicate my lasagna recipe"
 "Mark the meatloaf recipe as made today"
-"Upload an image for the chocolate cake recipe"
-```
-
-### Shopping Lists
-
-```
 "Create a shopping list for this week"
-"Add eggs and milk to my shopping list"
 "Add all ingredients from the lasagna recipe to my shopping list"
-"Check off milk on my shopping list"
-"Delete all checked items from my shopping list"
-```
-
-### Organization
-
-```
-"Show me all my recipe categories"
-"Create a new tag called 'Quick Meals'"
-"Find all recipes tagged with 'healthy'"
-"Show me categories that have no recipes"
+"Plan chicken soup for lunch on Friday"
+"Add a note to the chilli recipe saying it freezes well"
 "Mark eggs, butter, and flour as on hand"
 "Label tomatoes, onions, and garlic as 'Produce'"
 ```
 
-### Advanced Filtering
+See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooting.
 
-```
-"Find recipes that have both 'quick' AND 'healthy' tags"
-"Search for breakfast recipes containing 'eggs'"
-"Show me all vegetarian dinner recipes"
-```
+## Available Tools
 
-## 🎯 Available Tools
-
-### Recipe Tools (18 operations)
+### Recipe Tools (13 operations)
 
 - `get_recipes` - List/search recipes with advanced filtering
-- `get_recipe_detailed` - Get complete recipe details
-- `get_recipe_concise` - Get recipe summary
-- `create_recipe` - Create new recipe (flat or structured ingredients, with substitutions)
-- `create_recipe_full` - Create a recipe with full content in one call, including notes and nutrition
-- `import_recipe_from_url` - Import a recipe by scraping a URL
-- `update_recipe` - Update ingredients and instructions (full replacement)
-- `patch_recipe` - Update specific fields only, including the Notes panel and nutrition (macros)
+- `get_recipe` - Get complete recipe details, or a summary with `concise=true`
+- `create_recipe` - Create a recipe; only the name is required, with optional
+  ingredients (including substitutions), instructions, metadata, notes,
+  nutrition, and display settings
+- `import_recipe_from_url` - Import a recipe from a web page
+- `update_recipe` - Update content or metadata, including notes, nutrition, and
+  display settings; omitted fields are preserved, and empty lists clear content
 - `duplicate_recipe` - Clone a recipe
 - `mark_recipe_last_made` - Update last made timestamp
 - `set_recipe_image_from_url` - Set image from URL
 - `upload_recipe_image_file` - Upload image file
 - `upload_recipe_asset_file` - Upload document/asset
-- `set_recipe_categories` - Replace a recipe's categories by ID
-- `set_recipe_tags` - Replace a recipe's tags by ID
+- `update_recipe_categories_and_tags` - Replace or clear categories, tags, or both using IDs
 - `add_recipe_tags` - Add tags by name, keeping existing ones (auto-creates unknown names)
-- `update_recipe_categories_and_tags` - Update categories and/or tags in one call
 - `delete_recipe` - Delete recipe
 
 ### Shopping List Tools (15 operations)
@@ -166,7 +224,7 @@ The server checks Mealie's health on startup and exits if the instance is unreac
 - `get_shopping_lists` - List all shopping lists
 - `create_shopping_list` - Create new list
 - `get_shopping_list` - Get list by ID
-- `update_shopping_list` - Rename a list
+- `update_shopping_list` - Rename a list while preserving other fields
 - `delete_shopping_list` - Delete list
 - `add_recipe_to_shopping_list` - Add recipe ingredients
 - `remove_recipe_from_shopping_list` - Remove recipe ingredients
@@ -179,35 +237,33 @@ The server checks Mealie's health on startup and exits if the instance is unreac
 - `delete_shopping_list_item` - Delete single item
 - `delete_shopping_list_items_bulk` - Delete multiple items
 
-### Category Tools (7 operations)
+### Category Tools (6 operations)
 
 - `get_categories` - List/search categories
 - `get_empty_categories` - Find unused categories
 - `create_category` - Create new category
-- `get_category` - Get by ID
-- `get_category_by_slug` - Get by slug
+- `get_category` - Get by exactly one of `category_id` or `category_slug`
 - `update_category` - Update category
 - `delete_category` - Delete category
 
-### Tag Tools (7 operations)
+### Tag Tools (6 operations)
 
 - `get_tags` - List/search tags
 - `get_empty_tags` - Find unused tags
 - `create_tag` - Create new tag
-- `get_tag` - Get by ID
-- `get_tag_by_slug` - Get by slug
+- `get_tag` - Get by exactly one of `tag_id` or `tag_slug`
 - `update_tag` - Update tag
 - `delete_tag` - Delete tag
 
 ### Food Tools (13 operations)
 
-- `get_foods` - List/search foods (resolve ids for structured ingredients)
+- `get_foods` - List/search foods (resolve IDs for structured ingredients)
 - `create_food` - Create a new food
 - `get_food` - Get by ID
 - `update_food` - Update food
 - `delete_food` - Delete food
-- `set_food_on_hand` - Mark/unmark a food as on-hand (by id) for the current household
-- `mark_foods_on_hand` - Mark/unmark common ingredients as on-hand by name, creating missing foods
+- `set_food_on_hand` - Mark/unmark a food as on-hand (by ID) for the current household
+- `mark_foods_on_hand` - Mark/unmark ingredients as on-hand by name, creating missing foods
 - `set_food_aliases` - Replace a food's alias list
 - `add_food_alias` - Add an alias to a food, keeping existing ones
 - `remove_food_alias` - Remove a single alias from a food
@@ -217,7 +273,7 @@ The server checks Mealie's health on startup and exits if the instance is unreac
 
 ### Label Tools (5 operations)
 
-- `get_labels` - List/search labels
+- `get_labels` - List/search shopping-list labels
 - `create_label` - Create a new label (optional color)
 - `get_label` - Get by ID
 - `update_label` - Update label
@@ -231,165 +287,271 @@ The server checks Mealie's health on startup and exits if the instance is unreac
 - `update_unit` - Update unit
 - `delete_unit` - Delete unit
 
-### Recipe Tool Tools (6 operations)
+### Kitchen Tools (5 operations)
 
 - `get_tools` - List/search recipe tools (includes `householdsWithTool`)
 - `create_tool` - Create a new tool
-- `get_tool` - Get by ID
-- `get_tool_by_slug` - Get by slug
+- `get_tool` - Get by exactly one of `tool_id` or `tool_slug`
 - `update_tool` - Update tool
 - `delete_tool` - Delete tool
+
+### Parser Tools (1 operation)
+
+- `parse_ingredients` - Resolve one or more ingredient lines in one request; always returns a list
 
 ### Meal Plan Tools (6 operations)
 
 - `get_all_mealplans` - List meal plans
 - `create_mealplan` - Create meal plan entry
 - `create_mealplan_bulk` - Create multiple entries
-- `update_mealplan` - Update selected fields on an entry
+- `update_mealplan` - Update an entry while preserving omitted fields
 - `delete_mealplan` - Delete an entry
 - `get_todays_mealplan` - Get today's meals
 
-**Total: 82 tools** providing comprehensive Mealie API coverage
+**Total: 75 tools**
 
-### Prompts
+With `MEALIE_ENABLE_AI_IMPORT=true`, `import_recipe_with_ai` adds one optional
+recipe operation: **76 total tools, including 14 recipe tools**. It is absent
+from discovery and cannot be called when disabled.
 
-- `weekly_meal_plan` - Builds a 7-day meal plan from your recipes and saves it to Mealie
+### Migrating consolidated tools (breaking change)
 
-## 🔧 Development
+Redundant MCP names have been removed, not retained as aliases. Refresh your
+client's tool list and update saved calls:
+
+| Removed tool | Replacement |
+| --- | --- |
+| `create_recipe_full` | `create_recipe` with the same arguments |
+| `get_recipe_detailed` | `get_recipe` (full details by default) |
+| `get_recipe_concise` | `get_recipe` with `concise=true` |
+| `patch_recipe` | `update_recipe` with the same arguments |
+| `set_recipe_categories` | `update_recipe_categories_and_tags` with `category_ids` |
+| `set_recipe_tags` | `update_recipe_categories_and_tags` with `tag_ids` |
+| `get_category_by_slug` | `get_category` with `category_slug` |
+| `get_tag_by_slug` | `get_tag` with `tag_slug` |
+| `get_tool_by_slug` | `get_tool` with `tool_slug` |
+| `parse_ingredient` | `parse_ingredients(ingredients=[...])`; read the first result |
+
+Existing `create_recipe` and `update_recipe` calls remain supported. Recipe
+updates can now combine content and metadata, with omitted or null fields left
+unchanged. Ingredient and instruction lists replace only the provided fields.
+Nutrition remains a whole-object replacement, while settings are merged.
+
+Distinct operations remain separate: single and bulk writes have different
+response/failure contracts; paginated lists differ from individual lookups,
+unused-organizer queries, and today's meal plans. Recipe URL import, image URL
+scraping, and file uploads also perform different operations.
+
+### Optional AI recipe import
+
+Set `MEALIE_ENABLE_AI_IMPORT=true` in your MCP client's environment, shell, or
+local `.env`. Restart the server and refresh the client's tool list. This applies
+to stdio, SSE, and Streamable HTTP. Offline SDK discovery remains configuration-
+and network-free, listing only default tools; optional registration occurs at
+runtime startup (or when passing an explicit enabled `ServerConfig`).
+
+`import_recipe_with_ai` requires **Mealie 3.23.0+** and a default AI provider
+configured for the API user's group. It accepts any combination of:
+
+- `content`: plain text, raw HTML, or JSON; also used for corrections or notes.
+- `url`: an HTTP(S) recipe or video URL, fetched by Mealie and saved as the source.
+- `image_paths`: ordered image paths accessible to the **MCP server's filesystem**,
+  not a remote caller's computer. Multiple photos become one recipe; the first
+  becomes its cover image.
+
+At least one nonblank source is required. Sources are combined, with pasted
+content taking precedence when they disagree. Optional `translate_language`
+requests translation. `create_new_organizers` defaults to `false`: matching
+existing tags, categories, and kitchen tools may be assigned, but new ones are
+created only when explicitly requested.
+
+Before each import the server reads `/api/groups/self` to check `aiEnabled` and,
+for photos, `imageProviderEnabled`. Missing/malformed capabilities or a failed
+lookup produce an explicit error, not a silent disabled result. Video detection
+and the audio-provider requirement are handled by Mealie. These checks establish
+configuration, not provider connectivity, credentials, or available quota.
+
+**This tool immediately creates and saves a recipe.** Source material is processed
+by Mealie's configured AI providers and may incur charges. Review the returned
+recipe for accuracy. The import has a 300-second read timeout; other API calls
+retain their existing timeouts. No imports are automatically retried. After a
+timeout or connection failure, check Mealie before retrying or switching tools:
+creation may already have succeeded. If the follow-up fetch fails, the error
+includes `created_slug` and `stage`; retrieve that recipe rather than importing again.
+
+Choose the tool according to the task:
+
+| Task | Tool |
+| --- | --- |
+| Ordinary recipe webpage | `import_recipe_from_url` |
+| Unstructured text, photos, video, combined sources, translation, or explicit AI import | `import_recipe_with_ai` (opt-in) |
+| Save already-composed ingredients and instructions | `create_recipe` |
+| Attach a photo to an existing recipe without extracting content | `upload_recipe_image_file` |
+
+The opt-in controls only this new tool. It does not disable Mealie's own AI
+fallback for URL scraping or other existing AI features. See
+[Mealie's AI import documentation](https://mealie.io/documentation/getting-started/installation/ai-providers/#import-with-ai)
+and [usage examples](USAGE_EXAMPLES.md#optional-ai-import).
+
+## Development
 
 ### Setup
 
-1. Clone the repository:
+After [cloning the repository](#installation), install development dependencies:
 
 ```bash
-git clone <repository-url>
-cd mealie-mcp-server
+uv sync --locked --extra dev
 ```
 
-2. Install dependencies (including dev tools):
-
-```bash
-uv sync --extra dev
-```
-
-3. Configure environment:
+For manual testing, configure your Mealie instance:
 
 ```bash
 cp .env.template .env
 # Edit .env with your Mealie instance details
 ```
 
-4. Run MCP inspector for testing:
+Launch the MCP Inspector:
 
 ```bash
 uv run mcp dev src/server.py
 ```
 
-### Testing
-
-Run lint and tests before committing (CI runs the same checks):
+Run the offline checks; these do not require a Mealie instance or credentials:
 
 ```bash
 uv run ruff check src tests
 uv run pytest -q
 ```
 
-### Adding a Tool
-
-1. Add or extend the API mixin in `src/mealie/` and make sure `MealieFetcher` inherits it.
-2. Add the FastMCP wrapper in `src/tools/` and register it in `src/tools/__init__.py`.
-3. Add tests covering the request (method, URL, params/payload), validation, success, and failure.
-
-See [AGENTS.md](AGENTS.md) for the full contributor and agent guidelines.
-
 ### Project Structure
 
-```
-mealie-mcp-server/
-├── src/
-│   ├── mealie/              # API client mixins
-│   │   ├── client.py        # Base HTTP client
-│   │   ├── recipe.py        # Recipe operations
-│   │   ├── shopping_list.py # Shopping list operations
-│   │   ├── categories.py    # Category operations
-│   │   ├── tags.py          # Tag operations
-│   │   ├── foods.py         # Food operations (aliases, on-hand, labels)
-│   │   ├── labels.py        # Label operations
-│   │   ├── units.py         # Unit operations
-│   │   ├── tools.py         # Recipe tool (equipment) operations
-│   │   ├── mealplan.py      # Meal plan operations
-│   │   ├── group.py         # Group/household helpers
-│   │   ├── user.py          # Current user helpers
-│   │   └── __init__.py      # MealieFetcher aggregator
-│   ├── tools/               # MCP tool definitions (one module per area)
-│   ├── models/              # Pydantic request/response models
-│   ├── server.py            # MCP server entry point
-│   └── prompts.py           # Server prompts
-├── tests/                   # Pytest suite
-├── CHANGELOG.md             # Version history
-└── README.md
-```
+| Path | Purpose |
+| --- | --- |
+| [`src/mealie/`](src/mealie/) | HTTP client and API mixins |
+| [`src/tools/`](src/tools/) | FastMCP tool definitions and registration |
+| [`src/models/`](src/models/) | Pydantic request and response models |
+| [`src/server.py`](src/server.py) | Configuration, lifecycle, and entry point |
+| [`src/prompts.py`](src/prompts.py) | MCP prompts |
+| [`tests/`](tests/) | Offline tests and fixtures |
 
-## 📚 Important Notes
+Repository conventions are in [AGENTS.md](AGENTS.md), with focused guidance for
+[source code](src/AGENTS.md) and [tests](tests/AGENTS.md).
 
-### Filtering by Tags/Categories
+The automated suite uses fake HTTP responses and includes local HTTP-transport
+checks. It does not replace compatibility testing against your deployed Mealie
+version.
+
+## Important Notes
+
+The calls below use Python-style notation to illustrate MCP tool arguments; they
+are not standalone Python scripts.
+
+### Filtering by Tags and Categories
 
 When filtering recipes, you **must use slugs or UUIDs**, not display names:
 
-✅ **Correct:**
+Use `get_tags()` or `get_categories()` first to find the correct slugs:
 
-```
-"Get recipes with tags=['quick-meals', 'healthy']"
-```
-
-❌ **Incorrect:**
-
-```
-"Get recipes with tags=['Quick Meals', 'Healthy']"
+```python
+get_recipes(tags=["quick-meals", "healthy"])
 ```
 
-Use `get_tags()` or `get_categories()` first to find the correct slugs.
+For example, pass `quick-meals`, not the display name `Quick Meals`.
+
+### Nutrition Is Replaced, Not Merged
+
+Mealie replaces the whole `nutrition` object on write. `update_recipe` follows
+suit, so pass every value you want to keep:
+
+```python
+# Clears every nutrition value except fat.
+update_recipe(slug="...", nutrition={"fatContent": "12"})
+```
+
+### Parsing Ingredients in Bulk
+
+Resolving ingredients by hand costs one to two `get_foods` / `get_units` calls
+each. `parse_ingredients` does a whole recipe in one request and returns results
+that can be handed straight to `create_recipe`:
+
+```python
+parse_ingredients(ingredients=["1/4 cup chopped onion", "2 large eggs"])
+# -> [{"input": "1/4 cup chopped onion", "confidence": 0.99, "quantity": 0.25,
+#      "unit": {"id": "...", "name": "cup"},
+#      "food": {"id": "...", "name": "onion"}, "note": "chopped"}, ...]
+```
+
+A `null` unit or food means your instance has no matching entry; create one
+with `create_food` / `create_unit`, or leave the text in the note. Pass
+`verbose=True` for Mealie's full response including per-field confidences.
+
+### Uploaded Assets and Nutrition Can Be Stored but Hidden
+
+A recipe's `settings` object controls what the UI renders. `showAssets` and
+`showNutrition` gate the assets and nutrition cards, so an asset uploaded with
+`upload_recipe_asset_file` can be present in the API response and still be
+invisible in the web UI. Flip the toggle with:
+
+```python
+update_recipe(slug="...", settings={"showAssets": True})
+```
+
+Mealie seeds a new recipe's settings from the household preferences
+(`recipeShowAssets`, `recipeShowNutrition`, ...), so the defaults differ per
+instance. Check rather than assume.
+
+Only the toggles you pass are changed. The tool reads the recipe's current
+settings and sends the merged object, because Mealie does not reliably preserve
+toggles omitted from a settings PATCH.
 
 ### Field Preservation
 
-When updating shopping list items, the server automatically preserves all existing fields. You only need to specify the fields you want to change:
+When updating shopping list items, both single and bulk updates fetch the current
+records and preserve omitted fields. You only need to specify the fields you
+want to change:
 
-```
+```python
 # Only updates 'checked' field, preserves note, quantity, etc.
 update_shopping_list_item(item_id="...", checked=True)
 ```
 
-## 🐛 Known Issues
+Bulk shopping inputs accept snake_case names such as `shopping_list_id` and
+Mealie's camelCase names such as `shoppingListId`. Conflicting aliases and
+duplicate IDs in a bulk update are rejected before writing.
 
-None currently! All features have been tested end-to-end with Claude Desktop.
+### Meal Plan Validation and Clearing
 
-## 🔄 Changelog
+Meal dates must use `YYYY-MM-DD`, and entry types must be `breakfast`, `lunch`,
+`dinner`, or `side`. Creation requires a recipe or a nonblank title. Bulk meal
+plans are validated in full before any entries are created.
 
-See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes and version history.
+Omitted update fields remain unchanged. To remove an existing recipe link,
+use `update_mealplan(entry_id="...", clear_recipe=True, title="Leftovers")`.
+Do not combine `clear_recipe` with a replacement `recipe_id`.
 
-## 🤝 Contributing
+### Recovering from Partially Completed Writes
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Recipe creation/population and bulk meal-plan creation require multiple API
+requests and are not atomic. If a later request fails, the tool error includes
+recovery information identifying completed work. Inspect that information and
+the current Mealie state rather than blindly retrying the entire operation.
+A failed or timed-out request may have completed remotely.
 
-## 📄 License
+## Support and Contributing
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+- Check the [changelog](CHANGELOG.md) for changes and migration notes.
+- Review the [usage guide](USAGE_EXAMPLES.md) and
+  [Mealie documentation](https://docs.mealie.io).
+- Report problems through [GitHub issues](https://github.com/rldiao/mealie-mcp-server/issues).
+- For pull requests, follow the [development workflow](#development) and include
+  tests for behavior changes.
 
-## 🙏 Credits
+## License and Credits
+
+Licensed under the [MIT License](LICENSE).
 
 - [Mealie](https://github.com/mealie-recipes/mealie) - The recipe management system
-- [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) - The MCP framework (FastMCP)
-
-## 📞 Support
-
-For issues and questions:
-
-- Check the [CHANGELOG.md](CHANGELOG.md) for recent updates
-- Review the Mealie API documentation
-- Open an issue on GitHub
-
-## 🔗 Related Links
-
-- [Mealie Documentation](https://docs.mealie.io)
-- [MCP Protocol Specification](https://modelcontextprotocol.io)
+- [Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk) - SDK and
+  bundled FastMCP server
+- [Model Context Protocol](https://modelcontextprotocol.io) - Protocol documentation
 - [Claude Desktop](https://claude.ai/download)

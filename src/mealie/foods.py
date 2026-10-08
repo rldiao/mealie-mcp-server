@@ -3,6 +3,8 @@ from typing import Any, Dict, List, Optional
 
 from utils import format_api_params
 
+from .updates import merge_replacement_record
+
 logger = logging.getLogger("mealie-mcp")
 
 
@@ -35,7 +37,7 @@ class FoodsMixin:
         }
         params = format_api_params(param_dict)
 
-        logger.info({"message": "Retrieving foods", "parameters": params})
+        logger.info({"message": "Retrieving foods"})
         return self._handle_request("GET", "/api/foods", params=params)
 
     def create_food(
@@ -43,6 +45,8 @@ class FoodsMixin:
         name: str,
         plural_name: Optional[str] = None,
         description: Optional[str] = None,
+        extras: Optional[Dict[str, Any]] = None,
+        label_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create a new food.
 
@@ -50,6 +54,8 @@ class FoodsMixin:
             name: Name of the food
             plural_name: Optional plural name
             description: Optional description
+            extras: Optional arbitrary key-value metadata dict (Mealie ``extras``)
+            label_id: Optional Multi Purpose Label UUID (aisle/section grouping)
 
         Returns:
             JSON response containing the created food
@@ -62,8 +68,13 @@ class FoodsMixin:
             payload["pluralName"] = plural_name
         if description is not None:
             payload["description"] = description
+        if extras is not None:
+            payload["extras"] = extras
+        if label_id is not None:
+            # "" clears the label; Mealie wants null, not an empty UUID string.
+            payload["labelId"] = label_id or None
 
-        logger.info({"message": "Creating food", "name": name})
+        logger.info({"message": "Creating food"})
         return self._handle_request("POST", "/api/foods", json=payload)
 
     def get_food(self, food_id: str) -> Dict[str, Any]:
@@ -78,7 +89,7 @@ class FoodsMixin:
         if not food_id:
             raise ValueError("Food ID cannot be empty")
 
-        logger.info({"message": "Retrieving food", "food_id": food_id})
+        logger.info({"message": "Retrieving food"})
         return self._handle_request("GET", f"/api/foods/{food_id}")
 
     def update_food(self, food_id: str, food_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -86,8 +97,8 @@ class FoodsMixin:
 
         Mealie's PUT replaces the whole record, so we fetch the existing food
         and merge the provided fields over it. This both preserves fields the
-        caller did not set and keeps the required ``id``/``name`` in the body
-        (a partial body would null them and fail).
+        caller did not set and keeps the required ``name`` and existing ``id``.
+        An invalid or incomplete read is rejected before issuing the PUT.
 
         Args:
             food_id: The UUID of the food to update
@@ -102,9 +113,9 @@ class FoodsMixin:
             raise ValueError("Food data cannot be empty")
 
         existing = self.get_food(food_id)
-        merged = {**existing, **food_data} if isinstance(existing, dict) else food_data
+        merged = merge_replacement_record(existing, food_data)
 
-        logger.info({"message": "Updating food", "food_id": food_id})
+        logger.info({"message": "Updating food"})
         return self._handle_request("PUT", f"/api/foods/{food_id}", json=merged)
 
     def delete_food(self, food_id: str) -> Dict[str, Any]:
@@ -119,7 +130,7 @@ class FoodsMixin:
         if not food_id:
             raise ValueError("Food ID cannot be empty")
 
-        logger.info({"message": "Deleting food", "food_id": food_id})
+        logger.info({"message": "Deleting food"})
         return self._handle_request("DELETE", f"/api/foods/{food_id}")
 
     def set_food_on_hand(self, food_id: str, on_hand: bool = True) -> Dict[str, Any]:

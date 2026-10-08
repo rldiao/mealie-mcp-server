@@ -11,7 +11,7 @@ async def test_lookups_return_items(invoke, tool):
     assert "items" in out and isinstance(out["items"], list)
 
 
-async def test_food_crud_roundtrip(invoke):
+async def test_food_crud_operations(invoke):
     created = await invoke("create_food", name="Reis", plural_name="Reissorten")
     assert created["id"]
     got = await invoke("get_food", food_id="f1")
@@ -43,9 +43,9 @@ async def test_create_recipe_returns_populated_recipe(invoke):
     assert out["recipeInstructions"][0]["text"] == "Boil it."
 
 
-async def test_create_recipe_full_returns_full_recipe(invoke):
+async def test_create_recipe_returns_full_recipe(invoke):
     out = await invoke(
-        "create_recipe_full",
+        "create_recipe",
         name="Full Happy",
         description="a dish",
         org_url="https://example.com/r",
@@ -65,15 +65,15 @@ async def test_create_recipe_full_returns_full_recipe(invoke):
     assert out["tools"][0]["name"] == "Pfanne"
 
 
-async def test_patch_recipe_returns_updated_fields(invoke):
-    out = await invoke("patch_recipe", slug="r", servings=4, prep_time="10 min")
+async def test_update_recipe_returns_updated_fields(invoke):
+    out = await invoke("update_recipe", slug="r", servings=4, prep_time="10 min")
     assert out["recipeServings"] == 4
     assert out["prepTime"] == "10 min"
 
 
 async def test_get_recipe_concise_returns_summary(invoke, fetcher):
     fetcher.recipe = {**fetcher.recipe, "totalTime": "35 min"}
-    out = await invoke("get_recipe_concise", slug="test-recipe")
+    out = await invoke("get_recipe", slug="test-recipe", concise=True)
     assert out["name"]
     assert out["slug"]
     assert out["totalTime"] == "35 min"

@@ -1,6 +1,11 @@
 import logging
 from typing import Any, Dict, List, Optional
 
+from models.shopping_list import (
+    ShoppingListItemCreate,
+    ShoppingListItemPatch,
+    ShoppingListItemUpdate,
+)
 from utils import format_api_params
 
 logger = logging.getLogger("mealie-mcp")
@@ -50,7 +55,7 @@ class ShoppingListMixin:
 
         params = format_api_params(param_dict)
 
-        logger.info({"message": "Retrieving shopping lists", "parameters": params})
+        logger.info({"message": "Retrieving shopping lists"})
         return self._handle_request("GET", "/api/households/shopping/lists", params=params)
 
     def create_shopping_list(self, name: str) -> Dict[str, Any]:
@@ -62,12 +67,12 @@ class ShoppingListMixin:
         Returns:
             JSON response containing the created shopping list
         """
-        if not name:
+        if not name or not name.strip():
             raise ValueError("Shopping list name cannot be empty")
 
         payload = {"name": name}
 
-        logger.info({"message": "Creating shopping list", "name": name})
+        logger.info({"message": "Creating shopping list"})
         return self._handle_request("POST", "/api/households/shopping/lists", json=payload)
 
     def get_shopping_list(self, list_id: str) -> Dict[str, Any]:
@@ -79,10 +84,10 @@ class ShoppingListMixin:
         Returns:
             JSON response containing the shopping list details
         """
-        if not list_id:
+        if not list_id or not list_id.strip():
             raise ValueError("Shopping list ID cannot be empty")
 
-        logger.info({"message": "Retrieving shopping list", "list_id": list_id})
+        logger.info({"message": "Retrieving shopping list"})
         return self._handle_request("GET", f"/api/households/shopping/lists/{list_id}")
 
     def update_shopping_list(self, list_id: str, list_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -95,12 +100,16 @@ class ShoppingListMixin:
         Returns:
             JSON response containing the updated shopping list
         """
-        if not list_id:
+        if not list_id or not list_id.strip():
             raise ValueError("Shopping list ID cannot be empty")
         if not list_data:
             raise ValueError("Shopping list data cannot be empty")
+        if "name" in list_data and (
+            not isinstance(list_data["name"], str) or not list_data["name"].strip()
+        ):
+            raise ValueError("Shopping list name cannot be empty")
 
-        logger.info({"message": "Updating shopping list", "list_id": list_id})
+        logger.info({"message": "Updating shopping list"})
 
         # Fetch current list to preserve required fields (id, groupId, userId, etc.)
         current_list = self._handle_request("GET", f"/api/households/shopping/lists/{list_id}")
@@ -119,10 +128,10 @@ class ShoppingListMixin:
         Returns:
             JSON response confirming deletion
         """
-        if not list_id:
+        if not list_id or not list_id.strip():
             raise ValueError("Shopping list ID cannot be empty")
 
-        logger.info({"message": "Deleting shopping list", "list_id": list_id})
+        logger.info({"message": "Deleting shopping list"})
         return self._handle_request("DELETE", f"/api/households/shopping/lists/{list_id}")
 
     def add_recipe_to_shopping_list(
@@ -141,20 +150,16 @@ class ShoppingListMixin:
         Returns:
             JSON response containing the updated shopping list
         """
-        if not list_id:
+        if not list_id or not list_id.strip():
             raise ValueError("Shopping list ID cannot be empty")
-        if not recipe_id:
+        if not recipe_id or not recipe_id.strip():
             raise ValueError("Recipe ID cannot be empty")
 
         payload = {}
         if recipe_increment_quantity is not None:
             payload["recipeIncrementQuantity"] = recipe_increment_quantity
 
-        logger.info({
-            "message": "Adding recipe to shopping list",
-            "list_id": list_id,
-            "recipe_id": recipe_id,
-        })
+        logger.info({"message": "Adding recipe to shopping list"})
         return self._handle_request(
             "POST",
             f"/api/households/shopping/lists/{list_id}/recipe/{recipe_id}",
@@ -175,16 +180,12 @@ class ShoppingListMixin:
         Returns:
             JSON response containing the updated shopping list
         """
-        if not list_id:
+        if not list_id or not list_id.strip():
             raise ValueError("Shopping list ID cannot be empty")
-        if not recipe_id:
+        if not recipe_id or not recipe_id.strip():
             raise ValueError("Recipe ID cannot be empty")
 
-        logger.info({
-            "message": "Removing recipe from shopping list",
-            "list_id": list_id,
-            "recipe_id": recipe_id,
-        })
+        logger.info({"message": "Removing recipe from shopping list"})
         return self._handle_request(
             "POST",
             f"/api/households/shopping/lists/{list_id}/recipe/{recipe_id}/delete",
@@ -231,7 +232,7 @@ class ShoppingListMixin:
 
         params = format_api_params(param_dict)
 
-        logger.info({"message": "Retrieving shopping list items", "parameters": params})
+        logger.info({"message": "Retrieving shopping list items"})
         return self._handle_request("GET", "/api/households/shopping/items", params=params)
 
     def create_shopping_list_item(
@@ -256,9 +257,9 @@ class ShoppingListMixin:
         Returns:
             JSON response containing the created shopping list item
         """
-        if not shopping_list_id:
+        if not shopping_list_id or not shopping_list_id.strip():
             raise ValueError("Shopping list ID cannot be empty")
-        if not note:
+        if not note or not note.strip():
             raise ValueError("Item note cannot be empty")
 
         payload = {
@@ -268,19 +269,22 @@ class ShoppingListMixin:
 
         if quantity is not None:
             payload["quantity"] = quantity
-        if unit_id:
+        if unit_id is not None:
             payload["unitId"] = unit_id
-        if food_id:
+        if food_id is not None:
             payload["foodId"] = food_id
-        if label_id:
+        if label_id is not None:
             payload["labelId"] = label_id
 
-        logger.info({"message": "Creating shopping list item", "note": note})
+        payload = ShoppingListItemCreate.model_validate(payload).model_dump(
+            by_alias=True, exclude_unset=True
+        )
+        logger.info({"message": "Creating shopping list item"})
         return self._handle_request("POST", "/api/households/shopping/items", json=payload)
 
     def create_shopping_list_items_bulk(
         self,
-        items: List[Dict[str, Any]],
+        items: List[ShoppingListItemCreate | Dict[str, Any]],
     ) -> Dict[str, Any]:
         """Create multiple shopping list items in bulk.
 
@@ -292,9 +296,17 @@ class ShoppingListMixin:
         """
         if not items:
             raise ValueError("Items list cannot be empty")
+        payload = [
+            ShoppingListItemCreate.model_validate(item).model_dump(
+                by_alias=True, exclude_unset=True
+            )
+            for item in items
+        ]
 
         logger.info({"message": "Creating bulk shopping list items", "count": len(items)})
-        return self._handle_request("POST", "/api/households/shopping/items/create-bulk", json=items)
+        return self._handle_request(
+            "POST", "/api/households/shopping/items/create-bulk", json=payload
+        )
 
     def get_shopping_list_item(self, item_id: str) -> Dict[str, Any]:
         """Get a specific shopping list item by ID.
@@ -305,10 +317,10 @@ class ShoppingListMixin:
         Returns:
             JSON response containing the shopping list item details
         """
-        if not item_id:
+        if not item_id or not item_id.strip():
             raise ValueError("Shopping list item ID cannot be empty")
 
-        logger.info({"message": "Retrieving shopping list item", "item_id": item_id})
+        logger.info({"message": "Retrieving shopping list item"})
         return self._handle_request("GET", f"/api/households/shopping/items/{item_id}")
 
     def update_shopping_list_item(
@@ -327,38 +339,63 @@ class ShoppingListMixin:
         Returns:
             JSON response containing the updated shopping list item
         """
-        if not item_id:
+        if not item_id or not item_id.strip():
             raise ValueError("Shopping list item ID cannot be empty")
         if not item_data:
             raise ValueError("Item data cannot be empty")
+        patch = ShoppingListItemPatch.model_validate(item_data).model_dump(
+            by_alias=True, exclude_unset=True
+        )
+        if "id" in patch and patch["id"] != item_id:
+            raise ValueError("Item ID cannot be changed")
 
-        logger.info({"message": "Updating shopping list item", "item_id": item_id})
+        logger.info({"message": "Updating shopping list item"})
 
         # Fetch current item to preserve existing fields
         current_item = self._handle_request("GET", f"/api/households/shopping/items/{item_id}")
 
         # Merge updates into current item
-        merged_data = {**current_item, **item_data}
+        merged_data = {**current_item, **patch}
+        merged_data = ShoppingListItemCreate.model_validate(merged_data).model_dump(
+            by_alias=True, exclude_unset=True
+        )
 
         return self._handle_request("PUT", f"/api/households/shopping/items/{item_id}", json=merged_data)
 
     def update_shopping_list_items_bulk(
         self,
-        items: List[Dict[str, Any]],
+        items: List[ShoppingListItemUpdate | Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """Update multiple shopping list items in bulk.
+        """Merge partial item updates into current records before bulk replacement.
 
         Args:
-            items: List of shopping list item dictionaries with IDs
+            items: List of shopping list item patches with IDs
 
         Returns:
             JSON response with update results (may include per-item status)
         """
         if not items:
             raise ValueError("Items list cannot be empty")
+        updates = [ShoppingListItemUpdate.model_validate(item) for item in items]
+        if len({item.id for item in updates}) != len(updates):
+            raise ValueError("An item may only appear once in a bulk update")
+        payload = []
+        for item in updates:
+            current = self.get_shopping_list_item(item.id)
+            merged = {
+                **current,
+                **item.model_dump(by_alias=True, exclude_unset=True),
+            }
+            payload.append(
+                ShoppingListItemCreate.model_validate(merged).model_dump(
+                    by_alias=True, exclude_unset=True
+                )
+            )
 
         logger.info({"message": "Updating bulk shopping list items", "count": len(items)})
-        return self._handle_request("PUT", "/api/households/shopping/items", json=items)
+        return self._handle_request(
+            "PUT", "/api/households/shopping/items", json=payload
+        )
 
     def delete_shopping_list_item(self, item_id: str) -> Dict[str, Any]:
         """Delete a specific shopping list item.
@@ -369,10 +406,10 @@ class ShoppingListMixin:
         Returns:
             JSON response confirming deletion
         """
-        if not item_id:
+        if not item_id or not item_id.strip():
             raise ValueError("Shopping list item ID cannot be empty")
 
-        logger.info({"message": "Deleting shopping list item", "item_id": item_id})
+        logger.info({"message": "Deleting shopping list item"})
         return self._handle_request("DELETE", f"/api/households/shopping/items/{item_id}")
 
     def delete_shopping_list_items_bulk(
@@ -389,6 +426,8 @@ class ShoppingListMixin:
         """
         if not item_ids:
             raise ValueError("Item IDs list cannot be empty")
+        if any(not isinstance(item_id, str) or not item_id.strip() for item_id in item_ids):
+            raise ValueError("Item IDs cannot be empty")
 
         params = {"ids": item_ids}
 

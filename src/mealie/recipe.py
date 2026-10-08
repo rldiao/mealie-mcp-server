@@ -1,9 +1,35 @@
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
+import httpx
+from pydantic import HttpUrl, TypeAdapter, ValidationError
+
+from mealie.client import MealieApiError
+from models.ai_import import AIProviderCapabilities
 from utils import format_api_params
 
 logger = logging.getLogger("mealie-mcp")
+
+
+def _upload_extension(filename: str, extension: Optional[str] = None) -> str:
+    """Resolve the bare extension (no dot, lowercase) for a Mealie upload.
+
+    Mealie takes the extension as a separate form field on the image and asset
+    upload endpoints instead of deriving it from the uploaded file name.
+    """
+    if extension:
+        resolved = extension.strip().lstrip(".")
+    else:
+        stem, dot, suffix = filename.strip().rpartition(".")
+        resolved = suffix if dot and stem else ""
+
+    resolved = resolved.strip().lower()
+    if not resolved:
+        raise ValueError(
+            "Could not determine a file extension; pass the extension explicitly"
+        )
+    return resolved
 
 
 class RecipeMixin:
@@ -67,7 +93,7 @@ class RecipeMixin:
 
         params = format_api_params(param_dict)
 
-        logger.info({"message": "Retrieving recipes", "parameters": params})
+        logger.info({"message": "Retrieving recipes"})
         return self._handle_request("GET", "/api/recipes", params=params)
 
     def get_recipe(self, slug: str) -> Dict[str, Any]:
@@ -82,7 +108,7 @@ class RecipeMixin:
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
 
-        logger.info({"message": "Retrieving recipe", "slug": slug})
+        logger.info({"message": "Retrieving recipe"})
         return self._handle_request("GET", f"/api/recipes/{slug}")
 
     def update_recipe(self, slug: str, recipe_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -100,7 +126,7 @@ class RecipeMixin:
         if not recipe_data:
             raise ValueError("Recipe data cannot be empty")
 
-        logger.info({"message": "Updating recipe", "slug": slug})
+        logger.info({"message": "Updating recipe"})
         return self._handle_request("PUT", f"/api/recipes/{slug}", json=recipe_data)
 
     def create_recipe(self, name: str) -> str:
@@ -112,7 +138,9 @@ class RecipeMixin:
         Returns:
             Slug of the newly created recipe
         """
-        logger.info({"message": "Creating new recipe", "name": name})
+        if not name.strip():
+            raise ValueError("Recipe name cannot be empty")
+        logger.info({"message": "Creating new recipe"})
         return self._handle_request("POST", "/api/recipes", json={"name": name})
 
     def import_recipe_from_url(
@@ -131,15 +159,87 @@ class RecipeMixin:
         Returns:
             Slug of the newly created recipe
         """
-        if not url:
+        if not url.strip():
             raise ValueError("URL cannot be empty")
 
-        logger.info({"message": "Importing recipe from URL", "url": url})
+        logger.info({"message": "Importing recipe from URL"})
         return self._handle_request(
             "POST",
             "/api/recipes/create/url",
             json={"url": url, "includeTags": include_tags},
         )
+
+    def import_recipe_with_ai(
+        self,
+        content: str | None = None,
+        url: str | None = None,
+        images: list[tuple[str, bytes]] | None = None,
+        translate_language: str | None = None,
+        create_new_organizers: bool = False,
+    ) -> str:
+        """Import combined sources using Mealie's configured AI providers."""
+        for value, label in (
+            (content, "Content"), (url, "URL"), (translate_language, "Translation language")
+        ):
+            if value is not None and not value.strip():
+                raise ValueError(f"{label} cannot be empty")
+        if not (content or url or images):
+            raise ValueError("Provide content, a URL, or at least one image")
+        if url is not None:
+            TypeAdapter(HttpUrl).validate_python(url)
+        for filename, image in images or []:
+            if not filename.strip() or not image:
+                raise ValueError("Image filename and data cannot be empty")
+
+        try:
+            group = self.get_current_group()
+        except (MealieApiError, TimeoutError, ConnectionError):
+            raise ValueError("Unable to determine Mealie AI capabilities") from None
+        try:
+            capabilities = AIProviderCapabilities.model_validate(
+                group.get("aiProviderSettings") if isinstance(group, dict) else None
+            )
+        except ValidationError:
+            raise ValueError("Unable to determine Mealie AI capabilities") from None
+        if not capabilities.aiEnabled:
+            raise ValueError("Configure a default AI provider in Mealie before importing")
+        if images and not capabilities.imageProviderEnabled:
+            raise ValueError("Configure an image AI provider in Mealie before importing photos")
+
+        data = {"createNewOrganizers": str(create_new_organizers).lower()}
+        for key, value in (
+            ("content", content), ("url", url), ("translateLanguage", translate_language)
+        ):
+            if value is not None:
+                data[key] = value
+        # Mealie stores uploads by basename; prefix every name to avoid collisions.
+        files = [
+            ("images", (f"{index}-{filename}", image))
+            for index, (filename, image) in enumerate(images or [])
+        ]
+        logger.info({"message": "Importing recipe with AI"})
+        try:
+            slug = self._handle_request(
+                "POST", "/api/recipes/create/ai", data=data, files=files or None,
+                timeout=httpx.Timeout(30.0, read=300.0),
+            )
+        except MealieApiError as error:
+            if error.status_code == 404:
+                raise ValueError(
+                    "AI import endpoint unavailable; Mealie 3.23.0 or newer is required"
+                ) from None
+            raise
+        except (TimeoutError, ConnectionError):
+            raise ValueError(
+                "AI import connection failed or timed out; creation outcome is unknown. "
+                "Check Mealie for the recipe before retrying or using another import tool."
+            ) from None
+        if not isinstance(slug, str) or not re.fullmatch(r"[\w-]+", slug):
+            raise ValueError(
+                "Mealie returned an invalid AI import slug; creation outcome is unknown. "
+                "Check Mealie before retrying."
+            )
+        return slug
 
     def patch_recipe(self, slug: str, recipe_data: Dict[str, Any]) -> Dict[str, Any]:
         """Partially update a recipe (only updates provided fields)
@@ -156,7 +256,7 @@ class RecipeMixin:
         if not recipe_data:
             raise ValueError("Recipe data cannot be empty")
 
-        logger.info({"message": "Patching recipe", "slug": slug})
+        logger.info({"message": "Patching recipe"})
         return self._handle_request("PATCH", f"/api/recipes/{slug}", json=recipe_data)
 
     def set_recipe_categories(self, slug: str, category_ids: List[str]) -> Dict[str, Any]:
@@ -172,7 +272,7 @@ class RecipeMixin:
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
 
-        logger.info({"message": "Setting recipe categories", "slug": slug, "category_ids": category_ids})
+        logger.info({"message": "Setting recipe categories"})
         categories = [self.get_category(cid) for cid in category_ids]
         return self._handle_request("PATCH", f"/api/recipes/{slug}", json={"recipeCategory": categories})
 
@@ -189,7 +289,7 @@ class RecipeMixin:
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
 
-        logger.info({"message": "Setting recipe tags", "slug": slug, "tag_ids": tag_ids})
+        logger.info({"message": "Setting recipe tags"})
         tags = [self.get_tag(tid) for tid in tag_ids]
         return self._handle_request("PATCH", f"/api/recipes/{slug}", json={"tags": tags})
 
@@ -259,7 +359,7 @@ class RecipeMixin:
         if category_ids is None and tag_ids is None:
             raise ValueError("At least one of category_ids or tag_ids must be provided")
 
-        logger.info({"message": "Setting recipe categories and tags", "slug": slug})
+        logger.info({"message": "Setting recipe categories and tags"})
         recipe_data = {}
         if category_ids is not None:
             recipe_data["recipeCategory"] = [self.get_category(cid) for cid in category_ids]
@@ -284,7 +384,7 @@ class RecipeMixin:
         if name:
             payload["name"] = name
 
-        logger.info({"message": "Duplicating recipe", "slug": slug})
+        logger.info({"message": "Duplicating recipe"})
         return self._handle_request("POST", f"/api/recipes/{slug}/duplicate", json=payload)
 
     def update_recipe_last_made(self, slug: str, timestamp: Optional[str] = None) -> Dict[str, Any]:
@@ -307,7 +407,7 @@ class RecipeMixin:
 
         payload = {"timestamp": timestamp}
 
-        logger.info({"message": "Updating recipe last made", "slug": slug})
+        logger.info({"message": "Updating recipe last made"})
         return self._handle_request("PATCH", f"/api/recipes/{slug}/last-made", json=payload)
 
     def scrape_recipe_image_from_url(self, slug: str, image_url: str) -> Dict[str, Any]:
@@ -327,16 +427,23 @@ class RecipeMixin:
 
         payload = {"url": image_url}
 
-        logger.info({"message": "Scraping recipe image from URL", "slug": slug, "url": image_url})
+        logger.info({"message": "Scraping recipe image from URL"})
         return self._handle_request("POST", f"/api/recipes/{slug}/image", json=payload)
 
-    def upload_recipe_image(self, slug: str, image_data: bytes, filename: str) -> Dict[str, Any]:
+    def upload_recipe_image(
+        self,
+        slug: str,
+        image_data: bytes,
+        filename: str,
+        extension: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Upload a recipe image file (multipart upload)
 
         Args:
             slug: The slug identifier of the recipe
             image_data: Binary image data
             filename: Name of the image file
+            extension: Image extension such as "jpg"; derived from filename when omitted
 
         Returns:
             JSON response confirming the image was uploaded
@@ -348,18 +455,33 @@ class RecipeMixin:
         if not filename:
             raise ValueError("Filename cannot be empty")
 
+        extension = _upload_extension(filename, extension)
+
         files = {"image": (filename, image_data)}
+        # Mealie requires the extension as a separate form field
+        data = {"extension": extension}
 
-        logger.info({"message": "Uploading recipe image", "slug": slug, "filename": filename})
-        return self._handle_request("PUT", f"/api/recipes/{slug}/image", files=files)
+        logger.info({"message": "Uploading recipe image"})
+        return self._handle_request("PUT", f"/api/recipes/{slug}/image", files=files, data=data)
 
-    def upload_recipe_asset(self, slug: str, asset_data: bytes, filename: str) -> Dict[str, Any]:
+    def upload_recipe_asset(
+        self,
+        slug: str,
+        asset_data: bytes,
+        filename: str,
+        name: Optional[str] = None,
+        icon: Optional[str] = None,
+        extension: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Upload a recipe asset file (multipart upload)
 
         Args:
             slug: The slug identifier of the recipe
             asset_data: Binary asset data
             filename: Name of the asset file
+            name: Display name of the asset; derived from filename when omitted
+            icon: Material Design icon name; defaults to "mdi-file"
+            extension: Asset extension such as "pdf"; derived from filename when omitted
 
         Returns:
             JSON response containing the uploaded asset details
@@ -371,10 +493,15 @@ class RecipeMixin:
         if not filename:
             raise ValueError("Filename cannot be empty")
 
-        files = {"file": (filename, asset_data)}
+        extension = _upload_extension(filename, extension)
+        name = name or filename.rsplit(".", 1)[0] or filename
 
-        logger.info({"message": "Uploading recipe asset", "slug": slug, "filename": filename})
-        return self._handle_request("POST", f"/api/recipes/{slug}/assets", files=files)
+        files = {"file": (filename, asset_data)}
+        # Mealie requires name, icon and extension as separate form fields
+        data = {"name": name, "icon": icon or "mdi-file", "extension": extension}
+
+        logger.info({"message": "Uploading recipe asset"})
+        return self._handle_request("POST", f"/api/recipes/{slug}/assets", files=files, data=data)
 
     def delete_recipe(self, slug: str) -> Dict[str, Any]:
         """Delete a recipe
@@ -388,5 +515,5 @@ class RecipeMixin:
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
 
-        logger.info({"message": "Deleting recipe", "slug": slug})
+        logger.info({"message": "Deleting recipe"})
         return self._handle_request("DELETE", f"/api/recipes/{slug}")

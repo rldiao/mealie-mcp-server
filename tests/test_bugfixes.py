@@ -25,9 +25,9 @@ async def test_update_tool_fetch_merges_and_keeps_id(invoke, fetcher):
 # --- BUG-2: tags/tools need a slug; derive one when the caller omits it -----
 
 
-async def test_create_recipe_full_fills_organizer_slug(invoke, fetcher):
+async def test_create_recipe_fills_organizer_slug(invoke, fetcher):
     await invoke(
-        "create_recipe_full",
+        "create_recipe",
         name="R",
         tags=[{"id": "t1", "name": "Vegetarisch"}],  # slug omitted -> derived
         tools=[{"id": "k1", "name": "Pfanne", "slug": "my-pfanne"}],  # slug kept
@@ -37,8 +37,8 @@ async def test_create_recipe_full_fills_organizer_slug(invoke, fetcher):
     assert body["tools"][0]["slug"] == "my-pfanne"
 
 
-async def test_patch_recipe_fills_organizer_slug_with_umlaut(invoke, fetcher):
-    await invoke("patch_recipe", slug="r", tags=[{"id": "t1", "name": "Feta-Käse"}])
+async def test_update_recipe_fills_organizer_slug_with_umlaut(invoke, fetcher):
+    await invoke("update_recipe", slug="r", tags=[{"id": "t1", "name": "Feta-Käse"}])
     body = fetcher.last("PATCH", "/api/recipes/")["json"]
     assert body["tags"][0]["slug"] == "feta-kase"  # ä transliterated, hyphenated
 
