@@ -113,3 +113,21 @@ async def test_set_foods_label_by_name_reports_unmatched_names(invoke, fetcher):
     assert result["not_found"] == ["Nonexistent"]
     # unmatched name shouldn't stop the label from being created/applied
     assert len(fetcher.labels) == 1
+
+
+@pytest.mark.parametrize(
+    "tool_name,arguments",
+    [
+        ("mark_foods_on_hand", {"names": ["Secret Saffron"]}),
+        ("set_foods_label_by_name", {"food_names": ["Secret Saffron"], "label_name": "Hidden Aisle"}),
+        ("create_label", {"name": "Hidden Aisle"}),
+    ],
+)
+async def test_food_and_label_logs_exclude_names(invoke, fetcher, caplog, tool_name, arguments):
+    import logging
+
+    fetcher.foods = [{"id": "food-1", "name": "Secret Saffron", "householdsWithIngredientFood": []}]
+    with caplog.at_level(logging.DEBUG, logger="mealie-mcp"):
+        await invoke(tool_name, **arguments)
+    assert "Secret Saffron" not in caplog.text
+    assert "Hidden Aisle" not in caplog.text

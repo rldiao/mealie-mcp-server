@@ -312,7 +312,7 @@ class RecipeMixin:
         if not tag_names:
             raise ValueError("Tag names cannot be empty")
 
-        logger.info({"message": "Adding recipe tags", "slug": slug, "tag_names": tag_names})
+        logger.info({"message": "Adding recipe tags"})
 
         recipe = self.get_recipe(slug)
         merged_tags = list(recipe.get("tags", []))

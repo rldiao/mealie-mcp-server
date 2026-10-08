@@ -32,7 +32,7 @@ class LabelsMixin:
         }
         params = format_api_params(param_dict)
 
-        logger.info({"message": "Retrieving labels", "parameters": params})
+        logger.info({"message": "Retrieving labels"})
         return self._handle_request("GET", "/api/groups/labels", params=params)
 
     def create_label(self, name: str, color: Optional[str] = None) -> Dict[str, Any]:
@@ -52,7 +52,7 @@ class LabelsMixin:
         if color is not None:
             payload["color"] = color
 
-        logger.info({"message": "Creating label", "name": name})
+        logger.info({"message": "Creating label"})
         return self._handle_request("POST", "/api/groups/labels", json=payload)
 
     def get_label(self, label_id: str) -> Dict[str, Any]:
@@ -67,7 +67,7 @@ class LabelsMixin:
         if not label_id:
             raise ValueError("Label ID cannot be empty")
 
-        logger.info({"message": "Retrieving label", "label_id": label_id})
+        logger.info({"message": "Retrieving label"})
         return self._handle_request("GET", f"/api/groups/labels/{label_id}")
 
     def update_label(self, label_id: str, label_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -85,7 +85,7 @@ class LabelsMixin:
         if not label_data:
             raise ValueError("Label data cannot be empty")
 
-        logger.info({"message": "Updating label", "label_id": label_id})
+        logger.info({"message": "Updating label"})
         return self._handle_request(
             "PUT", f"/api/groups/labels/{label_id}", json=label_data
         )
@@ -102,5 +102,5 @@ class LabelsMixin:
         if not label_id:
             raise ValueError("Label ID cannot be empty")
 
-        logger.info({"message": "Deleting label", "label_id": label_id})
+        logger.info({"message": "Deleting label"})
         return self._handle_request("DELETE", f"/api/groups/labels/{label_id}")

@@ -163,13 +163,7 @@ class FoodsMixin:
 
         merged = {**existing, "householdsWithIngredientFood": households}
 
-        logger.info(
-            {
-                "message": "Setting food on-hand status",
-                "food_id": food_id,
-                "on_hand": on_hand,
-            }
-        )
+        logger.info({"message": "Setting food on-hand status"})
         return self._handle_request("PUT", f"/api/foods/{food_id}", json=merged)
 
     def set_foods_on_hand_by_name(
@@ -192,9 +186,7 @@ class FoodsMixin:
         if not names:
             raise ValueError("Food names cannot be empty")
 
-        logger.info(
-            {"message": "Marking foods on-hand", "names": names, "on_hand": on_hand}
-        )
+        logger.info({"message": "Marking foods on-hand"})
 
         household_id = self.get_current_user().get("householdId")
         updated = []
@@ -257,9 +249,7 @@ class FoodsMixin:
 
         merged = {**existing, "aliases": alias_dicts}
 
-        logger.info(
-            {"message": "Setting food aliases", "food_id": food_id, "aliases": aliases}
-        )
+        logger.info({"message": "Setting food aliases"})
         return self._handle_request("PUT", f"/api/foods/{food_id}", json=merged)
 
     def add_food_alias(self, food_id: str, alias: str) -> Dict[str, Any]:
@@ -287,9 +277,7 @@ class FoodsMixin:
 
         merged = {**existing, "aliases": aliases}
 
-        logger.info(
-            {"message": "Adding food alias", "food_id": food_id, "alias": alias}
-        )
+        logger.info({"message": "Adding food alias"})
         return self._handle_request("PUT", f"/api/foods/{food_id}", json=merged)
 
     def set_food_label(self, food_id: str, label_id: Optional[str]) -> Dict[str, Any]:
@@ -309,9 +297,7 @@ class FoodsMixin:
         existing = self.get_food(food_id)
         merged = {**existing, "labelId": label_id}
 
-        logger.info(
-            {"message": "Setting food label", "food_id": food_id, "label_id": label_id}
-        )
+        logger.info({"message": "Setting food label"})
         return self._handle_request("PUT", f"/api/foods/{food_id}", json=merged)
 
     def _resolve_or_create_label(self, label_name: str) -> Dict[str, Any]:
@@ -364,13 +350,7 @@ class FoodsMixin:
         label = self._resolve_or_create_label(label_name)
         merged = {**food, "labelId": label["id"]}
 
-        logger.info(
-            {
-                "message": "Setting food label by name",
-                "food_name": food_name,
-                "label_name": label_name,
-            }
-        )
+        logger.info({"message": "Setting food label by name"})
         return self._handle_request("PUT", f"/api/foods/{food['id']}", json=merged)
 
     def set_foods_label_by_name(
@@ -419,13 +399,7 @@ class FoodsMixin:
                 self._handle_request("PUT", f"/api/foods/{food['id']}", json=merged)
             )
 
-        logger.info(
-            {
-                "message": "Setting label on foods by name",
-                "food_names": food_names,
-                "label_name": label_name,
-            }
-        )
+        logger.info({"message": "Setting label on foods by name"})
         return {"updated": updated, "not_found": not_found}
 
     def remove_food_alias(self, food_id: str, alias: str) -> Dict[str, Any]:
@@ -453,7 +427,5 @@ class FoodsMixin:
 
         merged = {**existing, "aliases": aliases}
 
-        logger.info(
-            {"message": "Removing food alias", "food_id": food_id, "alias": alias}
-        )
+        logger.info({"message": "Removing food alias"})
         return self._handle_request("PUT", f"/api/foods/{food_id}", json=merged)
