@@ -175,6 +175,19 @@ class RecipeIngredientSubstitutionInput(BaseModel):
         return self
 
 
+class RecipeNoteInput(BaseModel):
+    """One entry in a recipe's Notes panel."""
+
+    title: str = Field(default="", description="Heading for the note; may be empty.")
+    text: str = Field(description="Body of the note.")
+
+    @model_validator(mode="after")
+    def _require_content(self) -> "RecipeNoteInput":
+        if not self.title.strip() and not self.text.strip():
+            raise ValueError("a note needs a title or text")
+        return self
+
+
 class RecipeIngredientInput(BaseModel):
     """Structured ingredient accepted by the create/update recipe tools.
 

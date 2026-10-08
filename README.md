@@ -124,7 +124,7 @@ Restart Claude Desktop to load the server.
 - `create_recipe` - Create new recipe (flat or structured ingredients)
 - `create_recipe_full` - Create a recipe with full content in one call
 - `update_recipe` - Update recipe (full replacement)
-- `patch_recipe` - Update specific fields only
+- `patch_recipe` - Update specific fields only, including the Notes panel
 - `duplicate_recipe` - Clone a recipe
 - `mark_recipe_last_made` - Update last made timestamp
 - `set_recipe_image_from_url` - Set image from URL

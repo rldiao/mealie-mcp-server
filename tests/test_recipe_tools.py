@@ -295,3 +295,58 @@ async def test_update_recipe_surfaces_client_failure(invoke, fetcher):
             ingredients=[{"note": "Cos", "substitutions": [{"note": "Romaine"}]}],
             instructions=["Toss."],
         )
+
+
+async def test_patch_recipe_sets_notes(invoke, fetcher):
+    await invoke(
+        "patch_recipe",
+        slug="test-recipe",
+        notes=[
+            {"title": "Make ahead", "text": "Dressing keeps 3 days."},
+            {"text": "Use Romaine if Cos is unavailable."},
+        ],
+    )
+    call = fetcher.last("PATCH", "/api/recipes/")
+    assert call["url"] == "/api/recipes/test-recipe"
+    assert call["json"] == {
+        "notes": [
+            {"title": "Make ahead", "text": "Dressing keeps 3 days."},
+            {"title": "", "text": "Use Romaine if Cos is unavailable."},
+        ]
+    }
+
+
+async def test_patch_recipe_empty_notes_clears_them(invoke, fetcher):
+    await invoke("patch_recipe", slug="test-recipe", notes=[])
+    assert fetcher.last("PATCH", "/api/recipes/")["json"] == {"notes": []}
+
+
+async def test_patch_recipe_rejects_empty_note(invoke, fetcher):
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    with pytest.raises(ToolError):
+        await invoke(
+            "patch_recipe", slug="test-recipe", notes=[{"title": " ", "text": ""}]
+        )
+    assert fetcher.last("PATCH", "/api/recipes/") is None
+
+
+async def test_patch_recipe_notes_surfaces_client_failure(invoke, fetcher):
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("mealie down")
+
+    fetcher.patch_recipe = boom
+    with pytest.raises(ToolError):
+        await invoke("patch_recipe", slug="test-recipe", notes=[{"text": "x"}])
+
+
+async def test_create_recipe_full_sets_notes(invoke, fetcher):
+    await invoke(
+        "create_recipe_full",
+        name="Salad",
+        notes=[{"title": "Serving", "text": "Chill the bowl first."}],
+    )
+    body = fetcher.last("PUT", "/api/recipes/")["json"]
+    assert body["notes"] == [{"title": "Serving", "text": "Chill the bowl first."}]
