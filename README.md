@@ -9,6 +9,8 @@ A comprehensive Model Context Protocol (MCP) server that enables AI assistants t
 ### 🍽️ Recipe Management
 
 - **CRUD Operations**: Create, read, update, patch, duplicate, and delete recipes
+- **URL Import**: Import recipes from websites using Mealie's built-in scraper
+- **Full Recipe Content**: Write structured ingredients (with substitutions), instructions, notes, timings, servings, and nutrition (macros)
 - **Advanced Search**: Filter by text, categories, tags, and tools with AND/OR logic
 - **Image Management**: Upload images or scrape from URLs
 - **Asset Uploads**: Attach documents and files to recipes
@@ -27,10 +29,17 @@ A comprehensive Model Context Protocol (MCP) server that enables AI assistants t
 - **Tags**: Tag recipes for easy filtering (Quick, Healthy, Family Favorite)
 - **Advanced Filtering**: Search and filter with full pagination support
 - **Empty Detection**: Find unused categories and tags
+- **Recipe Tools**: Manage kitchen equipment (e.g. Dutch oven, stand mixer)
+
+### 🥕 Foods, Units & Labels
+
+- **Foods**: Manage the ingredient library, aliases, and on-hand status
+- **Labels**: Create labels and apply them to foods individually or in bulk by name
+- **Units**: Manage measurement units used by structured ingredients
 
 ### 📅 Meal Planning
 
-- **Meal Plans**: View and manage meal plans
+- **Meal Plans**: View, create, update, and delete meal plan entries
 - **Bulk Creation**: Add multiple meals at once
 - **Today's Menu**: Quick access to today's planned meals
 
@@ -44,14 +53,14 @@ A comprehensive Model Context Protocol (MCP) server that enables AI assistants t
 
 ### Installation
 
-#### Option 1: Using fastmcp (Recommended)
+#### Option 1: Using the MCP CLI
 
-Install the server directly with the `fastmcp` command:
+From a clone of this repository, install the server into Claude Desktop with the MCP SDK's CLI:
 
 ```bash
-fastmcp install src/server.py \
-  --env-var MEALIE_BASE_URL=https://your-mealie-instance.com \
-  --env-var MEALIE_API_KEY=your-mealie-api-key
+uv run mcp install src/server.py \
+  -v MEALIE_BASE_URL=https://your-mealie-instance.com \
+  -v MEALIE_API_KEY=your-mealie-api-key
 ```
 
 #### Option 2: Using uvx
@@ -75,6 +84,16 @@ Run directly from GitHub without cloning:
 
 Restart Claude Desktop to load the server.
 
+### Configuration
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `MEALIE_BASE_URL` | Yes | Base URL of your Mealie instance, including protocol and port |
+| `MEALIE_API_KEY` | Yes | API token generated in your Mealie user settings |
+| `LOG_LEVEL` | No | Logging level (default `INFO`). Logs go to stderr. |
+
+The server checks Mealie's health on startup and exits if the instance is unreachable or the API key is rejected.
+
 ## 📖 Usage Examples
 
 ### Recipe Operations
@@ -82,6 +101,9 @@ Restart Claude Desktop to load the server.
 ```
 "Search for chicken recipes"
 "Create a new recipe for pasta carbonara"
+"Import the recipe at https://example.com/best-lasagna"
+"Add a note to the chilli recipe saying it freezes well"
+"Set the macros for the duck ragu to 520 kcal and 32 g protein per serving"
 "Duplicate my lasagna recipe"
 "Mark the meatloaf recipe as made today"
 "Upload an image for the chocolate cake recipe"
@@ -104,6 +126,8 @@ Restart Claude Desktop to load the server.
 "Create a new tag called 'Quick Meals'"
 "Find all recipes tagged with 'healthy'"
 "Show me categories that have no recipes"
+"Mark eggs, butter, and flour as on hand"
+"Label tomatoes, onions, and garlic as 'Produce'"
 ```
 
 ### Advanced Filtering
@@ -116,28 +140,33 @@ Restart Claude Desktop to load the server.
 
 ## 🎯 Available Tools
 
-### Recipe Tools (13 operations)
+### Recipe Tools (18 operations)
 
 - `get_recipes` - List/search recipes with advanced filtering
 - `get_recipe_detailed` - Get complete recipe details
 - `get_recipe_concise` - Get recipe summary
-- `create_recipe` - Create new recipe (flat or structured ingredients)
-- `create_recipe_full` - Create a recipe with full content in one call
-- `update_recipe` - Update recipe (full replacement)
+- `create_recipe` - Create new recipe (flat or structured ingredients, with substitutions)
+- `create_recipe_full` - Create a recipe with full content in one call, including notes and nutrition
+- `import_recipe_from_url` - Import a recipe by scraping a URL
+- `update_recipe` - Update ingredients and instructions (full replacement)
 - `patch_recipe` - Update specific fields only, including the Notes panel and nutrition (macros)
 - `duplicate_recipe` - Clone a recipe
 - `mark_recipe_last_made` - Update last made timestamp
 - `set_recipe_image_from_url` - Set image from URL
 - `upload_recipe_image_file` - Upload image file
 - `upload_recipe_asset_file` - Upload document/asset
+- `set_recipe_categories` - Replace a recipe's categories by ID
+- `set_recipe_tags` - Replace a recipe's tags by ID
 - `add_recipe_tags` - Add tags by name, keeping existing ones (auto-creates unknown names)
+- `update_recipe_categories_and_tags` - Update categories and/or tags in one call
 - `delete_recipe` - Delete recipe
 
-### Shopping List Tools (14 operations)
+### Shopping List Tools (15 operations)
 
 - `get_shopping_lists` - List all shopping lists
 - `create_shopping_list` - Create new list
 - `get_shopping_list` - Get list by ID
+- `update_shopping_list` - Rename a list
 - `delete_shopping_list` - Delete list
 - `add_recipe_to_shopping_list` - Add recipe ingredients
 - `remove_recipe_from_shopping_list` - Remove recipe ingredients
@@ -170,7 +199,8 @@ Restart Claude Desktop to load the server.
 - `update_tag` - Update tag
 - `delete_tag` - Delete tag
 
-### Food Tools (10 operations)
+### Food Tools (13 operations)
+
 - `get_foods` - List/search foods (resolve ids for structured ingredients)
 - `create_food` - Create a new food
 - `get_food` - Get by ID
@@ -181,8 +211,20 @@ Restart Claude Desktop to load the server.
 - `set_food_aliases` - Replace a food's alias list
 - `add_food_alias` - Add an alias to a food, keeping existing ones
 - `remove_food_alias` - Remove a single alias from a food
+- `set_food_label` - Set or clear a food's label by ID
+- `set_food_label_by_name` - Set a food's label, resolving food and label by name
+- `set_foods_label_by_name` - Apply one label to multiple foods by name
+
+### Label Tools (5 operations)
+
+- `get_labels` - List/search labels
+- `create_label` - Create a new label (optional color)
+- `get_label` - Get by ID
+- `update_label` - Update label
+- `delete_label` - Delete label
 
 ### Unit Tools (5 operations)
+
 - `get_units` - List/search units
 - `create_unit` - Create a new unit
 - `get_unit` - Get by ID
@@ -190,6 +232,7 @@ Restart Claude Desktop to load the server.
 - `delete_unit` - Delete unit
 
 ### Recipe Tool Tools (6 operations)
+
 - `get_tools` - List/search recipe tools (includes `householdsWithTool`)
 - `create_tool` - Create a new tool
 - `get_tool` - Get by ID
@@ -197,14 +240,20 @@ Restart Claude Desktop to load the server.
 - `update_tool` - Update tool
 - `delete_tool` - Delete tool
 
-### Meal Plan Tools (4 operations)
+### Meal Plan Tools (6 operations)
 
 - `get_all_mealplans` - List meal plans
 - `create_mealplan` - Create meal plan entry
 - `create_mealplan_bulk` - Create multiple entries
+- `update_mealplan` - Update selected fields on an entry
+- `delete_mealplan` - Delete an entry
 - `get_todays_mealplan` - Get today's meals
 
-**Total: 67 tools** providing comprehensive Mealie API coverage
+**Total: 82 tools** providing comprehensive Mealie API coverage
+
+### Prompts
+
+- `weekly_meal_plan` - Builds a 7-day meal plan from your recipes and saves it to Mealie
 
 ## 🔧 Development
 
@@ -217,10 +266,10 @@ git clone <repository-url>
 cd mealie-mcp-server
 ```
 
-2. Install dependencies:
+2. Install dependencies (including dev tools):
 
 ```bash
-uv sync
+uv sync --extra dev
 ```
 
 3. Configure environment:
@@ -236,6 +285,23 @@ cp .env.template .env
 uv run mcp dev src/server.py
 ```
 
+### Testing
+
+Run lint and tests before committing (CI runs the same checks):
+
+```bash
+uv run ruff check src tests
+uv run pytest -q
+```
+
+### Adding a Tool
+
+1. Add or extend the API mixin in `src/mealie/` and make sure `MealieFetcher` inherits it.
+2. Add the FastMCP wrapper in `src/tools/` and register it in `src/tools/__init__.py`.
+3. Add tests covering the request (method, URL, params/payload), validation, success, and failure.
+
+See [AGENTS.md](AGENTS.md) for the full contributor and agent guidelines.
+
 ### Project Structure
 
 ```
@@ -247,18 +313,19 @@ mealie-mcp-server/
 │   │   ├── shopping_list.py # Shopping list operations
 │   │   ├── categories.py    # Category operations
 │   │   ├── tags.py          # Tag operations
+│   │   ├── foods.py         # Food operations (aliases, on-hand, labels)
+│   │   ├── labels.py        # Label operations
+│   │   ├── units.py         # Unit operations
+│   │   ├── tools.py         # Recipe tool (equipment) operations
 │   │   ├── mealplan.py      # Meal plan operations
+│   │   ├── group.py         # Group/household helpers
+│   │   ├── user.py          # Current user helpers
 │   │   └── __init__.py      # MealieFetcher aggregator
-│   ├── tools/               # MCP tool definitions
-│   │   ├── recipe_tools.py
-│   │   ├── shopping_list_tools.py
-│   │   ├── categories_tools.py
-│   │   ├── tags_tools.py
-│   │   ├── mealplan_tools.py
-│   │   └── __init__.py
-│   ├── models/              # Pydantic models
+│   ├── tools/               # MCP tool definitions (one module per area)
+│   ├── models/              # Pydantic request/response models
 │   ├── server.py            # MCP server entry point
 │   └── prompts.py           # Server prompts
+├── tests/                   # Pytest suite
 ├── CHANGELOG.md             # Version history
 └── README.md
 ```
@@ -311,7 +378,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Credits
 
 - [Mealie](https://github.com/mealie-recipes/mealie) - The recipe management system
-- [FastMCP](https://github.com/jlowin/fastmcp) - The MCP framework
+- [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) - The MCP framework (FastMCP)
 
 ## 📞 Support
 
