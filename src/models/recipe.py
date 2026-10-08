@@ -1,9 +1,19 @@
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-class IngredientUnit(BaseModel):
+class MealieResponseModel(BaseModel):
+    """Model for data read back from Mealie.
+
+    Unknown fields are kept so a fetch-modify-PUT round-trip never drops data
+    from newer Mealie versions.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+
+class IngredientUnit(MealieResponseModel):
     id: Optional[str] = None
     name: str
     pluralName: Optional[str] = None
@@ -18,7 +28,7 @@ class IngredientUnit(BaseModel):
     updatedAt: Optional[str] = None
 
 
-class IngredientFood(BaseModel):
+class IngredientFood(MealieResponseModel):
     id: Optional[str] = None
     name: str
     pluralName: Optional[str] = None
@@ -32,7 +42,7 @@ class IngredientFood(BaseModel):
     updatedAt: Optional[str] = None
 
 
-class RecipeIngredient(BaseModel):
+class RecipeIngredient(MealieResponseModel):
     quantity: Optional[float] = None
     unit: Optional[IngredientUnit] = None
     food: Optional[IngredientFood] = None
@@ -43,13 +53,15 @@ class RecipeIngredient(BaseModel):
     title: Optional[str] = None
     originalText: Optional[str] = None
     referenceId: Optional[str] = None
+    substitutions: Optional[List[Dict[str, Any]]] = None
+    referencedRecipe: Optional[Dict[str, Any]] = None
 
 
-class IngredientReference(BaseModel):
+class IngredientReference(MealieResponseModel):
     referenceId: Optional[str] = None
 
 
-class RecipeInstruction(BaseModel):
+class RecipeInstruction(MealieResponseModel):
     id: Optional[str] = None
     title: Optional[str] = None
     summary: Optional[str] = None
@@ -57,7 +69,7 @@ class RecipeInstruction(BaseModel):
     ingredientReferences: List[IngredientReference] = Field(default_factory=list)
 
 
-class RecipeNutrition(BaseModel):
+class RecipeNutrition(MealieResponseModel):
     calories: Optional[str] = None
     carbohydrateContent: Optional[str] = None
     cholesterolContent: Optional[str] = None
@@ -71,7 +83,7 @@ class RecipeNutrition(BaseModel):
     unsaturatedFatContent: Optional[str] = None
 
 
-class RecipeSettings(BaseModel):
+class RecipeSettings(MealieResponseModel):
     public: bool = False
     showNutrition: bool = False
     showAssets: bool = False
@@ -81,26 +93,26 @@ class RecipeSettings(BaseModel):
     locked: bool = False
 
 
-class RecipeCategory(BaseModel):
+class RecipeCategory(MealieResponseModel):
     id: Optional[str] = None
     name: Optional[str] = None
     slug: Optional[str] = None
 
 
-class RecipeTag(BaseModel):
+class RecipeTag(MealieResponseModel):
     id: Optional[str] = None
     name: Optional[str] = None
     slug: Optional[str] = None
 
 
-class RecipeTool(BaseModel):
+class RecipeTool(MealieResponseModel):
     id: Optional[str] = None
     name: Optional[str] = None
     slug: Optional[str] = None
     householdsWithTool: List[str] = Field(default_factory=list)
 
 
-class Recipe(BaseModel):
+class Recipe(MealieResponseModel):
     id: str
     userId: str
     householdId: str
@@ -134,6 +146,33 @@ class Recipe(BaseModel):
     notes: List[Any] = Field(default_factory=list)
     extras: Dict[str, Any] = Field(default_factory=dict)
     comments: List[Any] = Field(default_factory=list)
+
+
+class RecipeIngredientSubstitutionInput(BaseModel):
+    """One "may be replaced by" option for a recipe ingredient.
+
+    Set a substitute food, a note, or both, e.g. a food plus "use half".
+    """
+
+    substituteFoodId: Optional[str] = Field(
+        default=None,
+        description="UUID of an existing Mealie food to substitute; look up with get_foods.",
+    )
+    note: Optional[str] = Field(
+        default=None,
+        description='Free-text substitute or caveat, e.g. "milk with lemon juice".',
+    )
+
+    @field_validator("note")
+    @classmethod
+    def _blank_note_to_none(cls, value: Optional[str]) -> Optional[str]:
+        return (value.strip() or None) if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def _require_food_or_note(self) -> "RecipeIngredientSubstitutionInput":
+        if not self.substituteFoodId and not self.note:
+            raise ValueError("a substitution needs a substituteFoodId, a note, or both")
+        return self
 
 
 class RecipeIngredientInput(BaseModel):
@@ -175,6 +214,14 @@ class RecipeIngredientInput(BaseModel):
     )
     title: Optional[str] = Field(
         default=None, description="Section heading rendered above this ingredient."
+    )
+    substitutions: Optional[List[RecipeIngredientSubstitutionInput]] = Field(
+        default=None,
+        description=(
+            "Substitutes Mealie shows for this ingredient. Omit to keep the "
+            "existing substitutions of the ingredient with the same referenceId "
+            "on update; pass [] to remove them."
+        ),
     )
 
 

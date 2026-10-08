@@ -174,3 +174,124 @@ async def test_add_recipe_tags_validates_inputs(invoke, fetcher):
 
     with pytest.raises(ToolError):
         await invoke("add_recipe_tags", slug="test-recipe", tags=[])
+
+
+COS_REF = "a1000001-0000-4000-8000-000000000001"
+ROMAINE_ID = "a1000001-0000-4000-8000-000000000002"
+EXISTING_SUBS = [
+    {
+        "substituteFoodId": ROMAINE_ID,
+        "note": None,
+        "substituteFood": {"id": ROMAINE_ID, "name": "Romaine"},
+    }
+]
+
+
+async def test_create_recipe_sends_ingredient_substitutions(invoke, fetcher):
+    await invoke(
+        "create_recipe",
+        name="Salad",
+        ingredients=[
+            {
+                "note": "Cos lettuce",
+                "substitutions": [
+                    {"substituteFoodId": ROMAINE_ID},
+                    {"note": "any crisp lettuce"},
+                ],
+            }
+        ],
+        instructions=["Toss."],
+    )
+    ing = fetcher.last("PUT", "/api/recipes/")["json"]["recipeIngredient"][0]
+    assert ing["substitutions"] == [
+        {"substituteFoodId": ROMAINE_ID},
+        {"note": "any crisp lettuce"},
+    ]
+
+
+async def test_create_recipe_rejects_empty_substitution(invoke, fetcher):
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    with pytest.raises(ToolError):
+        await invoke(
+            "create_recipe",
+            name="Salad",
+            ingredients=[{"note": "Cos", "substitutions": [{}]}],
+            instructions=["Toss."],
+        )
+    assert fetcher.last("PUT", "/api/recipes/") is None
+
+
+async def test_update_recipe_keeps_existing_links_when_omitted(invoke, fetcher):
+    fetcher.recipe = {
+        **fetcher.recipe,
+        "recipeIngredient": [
+            {
+                "note": "Cos",
+                "referenceId": COS_REF,
+                "substitutions": EXISTING_SUBS,
+                "referencedRecipe": {"id": "r1", "slug": "dressing"},
+            }
+        ],
+    }
+
+    await invoke(
+        "update_recipe",
+        slug="test-recipe",
+        ingredients=[{"note": "Cos lettuce", "referenceId": COS_REF}, "1 tsp salt"],
+        instructions=["Toss."],
+    )
+
+    ings = fetcher.last("PUT", "/api/recipes/test-recipe")["json"]["recipeIngredient"]
+    assert ings[0]["note"] == "Cos lettuce"
+    assert ings[0]["substitutions"] == EXISTING_SUBS
+    assert ings[0]["referencedRecipe"] == {"id": "r1", "slug": "dressing"}
+    assert "substitutions" not in ings[1]
+
+
+async def test_update_recipe_explicit_substitutions_replace_or_clear(invoke, fetcher):
+    fetcher.recipe = {
+        **fetcher.recipe,
+        "recipeIngredient": [
+            {"note": "Cos", "referenceId": COS_REF, "substitutions": EXISTING_SUBS},
+            {
+                "note": "buttermilk",
+                "referenceId": "a1000001-0000-4000-8000-000000000003",
+                "substitutions": [{"note": "kefir"}],
+            },
+        ],
+    }
+
+    await invoke(
+        "update_recipe",
+        slug="test-recipe",
+        ingredients=[
+            {"note": "Cos", "referenceId": COS_REF, "substitutions": []},
+            {
+                "note": "buttermilk",
+                "referenceId": "a1000001-0000-4000-8000-000000000003",
+                "substitutions": [{"note": "plain yoghurt, thinned"}],
+            },
+        ],
+        instructions=["Toss."],
+    )
+
+    ings = fetcher.last("PUT", "/api/recipes/test-recipe")["json"]["recipeIngredient"]
+    assert ings[0]["substitutions"] == []
+    assert ings[1]["substitutions"] == [{"note": "plain yoghurt, thinned"}]
+
+
+async def test_update_recipe_surfaces_client_failure(invoke, fetcher):
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("mealie down")
+
+    fetcher.update_recipe = boom
+    with pytest.raises(ToolError):
+        await invoke(
+            "update_recipe",
+            slug="test-recipe",
+            ingredients=[{"note": "Cos", "substitutions": [{"note": "Romaine"}]}],
+            instructions=["Toss."],
+        )

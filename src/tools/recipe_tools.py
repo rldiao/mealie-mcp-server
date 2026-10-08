@@ -104,6 +104,26 @@ def _normalize_references(recipe: Recipe) -> None:
                 ref.referenceId = _coerce_reference_id(ref.referenceId)
 
 
+def _carry_over_ingredient_links(
+    existing: List[RecipeIngredient], updated: List[RecipeIngredient]
+) -> None:
+    """Keep substitutions and recipe links the caller did not restate.
+
+    An updated ingredient whose referenceId matches an existing one inherits
+    that ingredient's substitutions and referencedRecipe when it leaves them
+    unset, so rewriting a recipe's ingredients does not silently drop them.
+    """
+    by_ref = {i.referenceId: i for i in existing if i.referenceId}
+    for ingredient in updated:
+        previous = by_ref.get(ingredient.referenceId)
+        if previous is None:
+            continue
+        if ingredient.substitutions is None:
+            ingredient.substitutions = previous.substitutions
+        if ingredient.referencedRecipe is None:
+            ingredient.referencedRecipe = previous.referencedRecipe
+
+
 def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     """Register all recipe-related tools with the MCP server."""
 
@@ -246,7 +266,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         - An ingredient string (e.g. "200 g basmati rice") is resolved by
           Mealie's natural-language parser into quantity/unit/food.
         - An ingredient object can set quantity, note, title, an existing
-          Mealie unit/food (by id and name), and a referenceId for step links.
+          Mealie unit/food (by id and name), a referenceId for step links, and
+          substitutions (each a substituteFoodId of an existing food, a note, or
+          both) that Mealie shows as "may be replaced by".
         - An instruction string is the step text; an instruction object can
           also carry a title and ingredientReferences for cook-mode highlights.
 
@@ -323,7 +345,10 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         """Replaces the ingredients and instructions of an existing recipe.
 
         Ingredients and instructions accept the same flat-string or structured
-        forms as create_recipe.
+        forms as create_recipe. A structured ingredient whose referenceId matches
+        an existing ingredient keeps that ingredient's substitutions and linked
+        recipe unless it sets substitutions itself ([] removes them); read the
+        current referenceIds with get_recipe_detailed first.
 
         Args:
             slug: The unique text identifier for the recipe to be updated.
@@ -337,9 +362,11 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             logger.info({"message": "Updating recipe", "slug": slug})
             recipe_json = mealie.get_recipe(slug)
             recipe = Recipe.model_validate(recipe_json)
+            existing_ingredients = recipe.recipeIngredient
             recipe.recipeIngredient = [_build_ingredient(i) for i in ingredients]
             recipe.recipeInstructions = [_build_instruction(i) for i in instructions]
             _normalize_references(recipe)
+            _carry_over_ingredient_links(existing_ingredients, recipe.recipeIngredient)
             return mealie.update_recipe(slug, recipe.model_dump(exclude_none=True))
         except Exception as e:
             error_msg = f"Error updating recipe '{slug}': {str(e)}"
