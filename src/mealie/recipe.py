@@ -293,6 +293,51 @@ class RecipeMixin:
         tags = [self.get_tag(tid) for tid in tag_ids]
         return self._handle_request("PATCH", f"/api/recipes/{slug}", json={"tags": tags})
 
+    def add_recipe_tags(self, slug: str, tag_names: List[str]) -> Dict[str, Any]:
+        """Add one or more tags to a recipe without removing existing tags.
+
+        Tag names are matched case-insensitively against the recipe's current
+        tags and against Mealie's existing tags; a name with no match is
+        created as a new tag.
+
+        Args:
+            slug: The slug identifier of the recipe
+            tag_names: Tag names to add (created in Mealie if they don't exist)
+
+        Returns:
+            JSON response containing the updated recipe details
+        """
+        if not slug:
+            raise ValueError("Recipe slug cannot be empty")
+        if not tag_names:
+            raise ValueError("Tag names cannot be empty")
+
+        logger.info({"message": "Adding recipe tags"})
+
+        recipe = self.get_recipe(slug)
+        merged_tags = list(recipe.get("tags", []))
+        known_names = {(t.get("name") or "").lower() for t in merged_tags}
+
+        for raw_name in tag_names:
+            name = raw_name.strip()
+            if not name or name.lower() in known_names:
+                continue
+
+            matches = self.get_tags(search=name).get("items", [])
+            tag = next(
+                (t for t in matches if (t.get("name") or "").lower() == name.lower()),
+                None,
+            )
+            if tag is None:
+                tag = self.create_tag(name)
+
+            merged_tags.append(tag)
+            known_names.add(name.lower())
+
+        return self._handle_request(
+            "PATCH", f"/api/recipes/{slug}", json={"tags": merged_tags}
+        )
+
     def set_recipe_categories_and_tags(
         self,
         slug: str,

@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
 
@@ -133,3 +133,140 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         """
         with tool_error_boundary("Error deleting food"):
             return mealie.delete_food(food_id)
+
+    @mcp.tool()
+    def set_food_on_hand(food_id: str, on_hand: bool = True) -> Dict[str, Any]:
+        """Mark or unmark a food as on-hand for the current household.
+
+        Args:
+            food_id: The UUID of the food.
+            on_hand: True to mark on-hand, False to clear it. Defaults to True.
+
+        Returns:
+            Dict[str, Any]: The updated food.
+        """
+        with tool_error_boundary("Error setting food on-hand status"):
+            return mealie.set_food_on_hand(food_id, on_hand=on_hand)
+
+    @mcp.tool()
+    def mark_foods_on_hand(names: List[str], on_hand: bool = True) -> Dict[str, Any]:
+        """Mark or unmark common ingredients as on-hand, by name.
+
+        Use this instead of set_food_on_hand when you know ingredient names
+        (e.g. pantry staples like "Salt", "Flour", "Olive Oil") but not their
+        Mealie food IDs. Names are matched case-insensitively against
+        existing foods; a name with no match is created as a new food.
+
+        Args:
+            names: Food names to update.
+            on_hand: True to mark on-hand, False to clear it. Defaults to True.
+
+        Returns:
+            Dict[str, Any]: {"updated": [...updated foods], "created": [...names of foods that were created]}.
+        """
+        with tool_error_boundary("Error marking foods on-hand"):
+            return mealie.set_foods_on_hand_by_name(names, on_hand=on_hand)
+
+    @mcp.tool()
+    def set_food_aliases(food_id: str, aliases: List[str]) -> Dict[str, Any]:
+        """Replace a food's aliases with the given list.
+
+        Aliases let Mealie match alternate names for a food (e.g. "Scallion"
+        as an alias for "Green Onion") when parsing ingredients. This
+        replaces the whole list; pass an empty list to clear all aliases, or
+        use add_food_alias/remove_food_alias to change one at a time.
+
+        Args:
+            food_id: The UUID of the food.
+            aliases: Alias names to set, e.g. ["Scallion", "Spring Onion"].
+
+        Returns:
+            Dict[str, Any]: The updated food.
+        """
+        with tool_error_boundary("Error setting food aliases"):
+            return mealie.set_food_aliases(food_id, aliases)
+
+    @mcp.tool()
+    def add_food_alias(food_id: str, alias: str) -> Dict[str, Any]:
+        """Add an alias to a food, keeping any aliases it already has.
+
+        Args:
+            food_id: The UUID of the food.
+            alias: Alias name to add, e.g. "Scallion".
+
+        Returns:
+            Dict[str, Any]: The updated food.
+        """
+        with tool_error_boundary("Error adding food alias"):
+            return mealie.add_food_alias(food_id, alias)
+
+    @mcp.tool()
+    def set_food_label(food_id: str, label_id: Optional[str] = None) -> Dict[str, Any]:
+        """Set or clear a food's label.
+
+        Args:
+            food_id: The UUID of the food.
+            label_id: The UUID of the label to assign. Omit or pass None to
+                clear the food's label.
+
+        Returns:
+            Dict[str, Any]: The updated food.
+        """
+        with tool_error_boundary("Error setting food label"):
+            return mealie.set_food_label(food_id, label_id)
+
+    @mcp.tool()
+    def set_food_label_by_name(food_name: str, label_name: str) -> Dict[str, Any]:
+        """Set a food's label, resolving both the food and label by name.
+
+        Use this instead of set_food_label when you know the food and label
+        names but not their Mealie IDs. Both are matched case-insensitively;
+        the food must already exist, but the label is created if no label
+        with that name exists yet.
+
+        Args:
+            food_name: Name of the food to update, e.g. "Carrot".
+            label_name: Name of the label to assign, e.g. "Produce".
+
+        Returns:
+            Dict[str, Any]: The updated food.
+        """
+        with tool_error_boundary("Error setting food label by name"):
+            return mealie.set_food_label_by_name(food_name, label_name)
+
+    @mcp.tool()
+    def set_foods_label_by_name(
+        food_names: List[str], label_name: str
+    ) -> Dict[str, Any]:
+        """Set one label on multiple foods at once, by name.
+
+        Use this instead of calling set_food_label_by_name repeatedly when
+        applying the same label to a batch of foods (e.g. tagging a set of
+        ingredients as "Produce"). The label is resolved once (created if it
+        doesn't exist) and applied to every matching food; food names are
+        matched case-insensitively and are NOT auto-created, so a typo is
+        reported instead of silently creating a new food.
+
+        Args:
+            food_names: Names of the foods to update, e.g. ["Carrot", "Onion"].
+            label_name: Name of the label to assign to all of them, e.g. "Produce".
+
+        Returns:
+            Dict[str, Any]: {"updated": [...updated foods], "not_found": [...names with no matching food]}.
+        """
+        with tool_error_boundary("Error setting label on foods"):
+            return mealie.set_foods_label_by_name(food_names, label_name)
+
+    @mcp.tool()
+    def remove_food_alias(food_id: str, alias: str) -> Dict[str, Any]:
+        """Remove an alias from a food.
+
+        Args:
+            food_id: The UUID of the food.
+            alias: Alias name to remove (matched case-insensitively).
+
+        Returns:
+            Dict[str, Any]: The updated food.
+        """
+        with tool_error_boundary("Error removing food alias"):
+            return mealie.remove_food_alias(food_id, alias)

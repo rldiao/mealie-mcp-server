@@ -26,7 +26,7 @@ def server(fetcher):
 async def test_ai_import_discovery(server):
     mcp, fetcher = server
     tools = await mcp.list_tools()
-    assert len(tools) == 62
+    assert len(tools) == 76
     tool = next(tool for tool in tools if tool.name == "import_recipe_with_ai")
     assert all(
         "import_recipe_with_ai" not in (other.description or "")

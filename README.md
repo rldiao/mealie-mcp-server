@@ -25,14 +25,19 @@ such as Claude Desktop.
 - **Recipes:** Create, read, update, import, duplicate, and delete recipes.
 - **Search:** Filter by text, categories, tags, and tools with AND/OR logic.
 - **Images and assets:** Upload recipe images and files, or set images from URLs.
-- **Nutrition and display:** Set per-serving nutrition and recipe visibility
-  settings such as `showAssets` and `showNutrition`.
+- **Nutrition and display:** Set per-serving nutrition (only the values you
+  pass change) and recipe visibility settings such as `showAssets` and
+  `showNutrition`.
+- **Notes and substitutions:** Write the recipe Notes panel and per-ingredient
+  substitutes; rewriting ingredients keeps existing substitutions.
 - **Ingredients:** Resolve free-text ingredients against Mealie's food and unit
   vocabulary.
 - **Shopping lists:** Manage lists and items, perform bulk operations, and add
   recipe ingredients with quantity scaling.
 - **Organization:** Manage categories, tags, foods, units, and recipe tools; find
-  unused categories and tags.
+  unused categories and tags; add tags to a recipe by name.
+- **Foods and labels:** Manage food aliases and on-hand status, and apply
+  shopping-list labels to foods individually or in bulk by name.
 - **Meal planning:** View, create, update, and delete meal plan entries, create
   multiple entries, and mark recipes as made today.
 
@@ -186,27 +191,32 @@ for remote access, following the [HTTP security guidance](#remote-access).
 "Create a shopping list for this week"
 "Add all ingredients from the lasagna recipe to my shopping list"
 "Plan chicken soup for lunch on Friday"
+"Add a note to the chilli recipe saying it freezes well"
+"Mark eggs, butter, and flour as on hand"
+"Label tomatoes, onions, and garlic as 'Produce'"
 ```
 
 See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooting.
 
 ## Available Tools
 
-### Recipe Tools (12 operations)
+### Recipe Tools (13 operations)
 
 - `get_recipes` - List/search recipes with advanced filtering
 - `get_recipe` - Get complete recipe details, or a summary with `concise=true`
 - `create_recipe` - Create a recipe; only the name is required, with optional
-  ingredients, instructions, metadata, nutrition, and display settings
+  ingredients (including substitutions), instructions, metadata, notes,
+  nutrition, and display settings
 - `import_recipe_from_url` - Import a recipe from a web page
-- `update_recipe` - Update content or metadata, including nutrition and display
-  settings; omitted fields are preserved, and empty lists clear content
+- `update_recipe` - Update content or metadata, including notes, nutrition, and
+  display settings; omitted fields are preserved, and empty lists clear content
 - `duplicate_recipe` - Clone a recipe
 - `mark_recipe_last_made` - Update last made timestamp
 - `set_recipe_image_from_url` - Set image from URL
 - `upload_recipe_image_file` - Upload image file
 - `upload_recipe_asset_file` - Upload document/asset
 - `update_recipe_categories_and_tags` - Replace or clear categories, tags, or both using IDs
+- `add_recipe_tags` - Add tags by name, keeping existing ones (auto-creates unknown names)
 - `delete_recipe` - Delete recipe
 
 ### Shopping List Tools (15 operations)
@@ -245,13 +255,29 @@ See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooti
 - `update_tag` - Update tag
 - `delete_tag` - Delete tag
 
-### Food Tools (5 operations)
+### Food Tools (13 operations)
 
 - `get_foods` - List/search foods (resolve IDs for structured ingredients)
 - `create_food` - Create a new food
 - `get_food` - Get by ID
 - `update_food` - Update food
 - `delete_food` - Delete food
+- `set_food_on_hand` - Mark/unmark a food as on-hand (by ID) for the current household
+- `mark_foods_on_hand` - Mark/unmark ingredients as on-hand by name, creating missing foods
+- `set_food_aliases` - Replace a food's alias list
+- `add_food_alias` - Add an alias to a food, keeping existing ones
+- `remove_food_alias` - Remove a single alias from a food
+- `set_food_label` - Set or clear a food's label by ID
+- `set_food_label_by_name` - Set a food's label, resolving food and label by name
+- `set_foods_label_by_name` - Apply one label to multiple foods by name
+
+### Label Tools (5 operations)
+
+- `get_labels` - List/search shopping-list labels
+- `create_label` - Create a new label (optional color)
+- `get_label` - Get by ID
+- `update_label` - Update label
+- `delete_label` - Delete label
 
 ### Unit Tools (5 operations)
 
@@ -282,10 +308,10 @@ See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooti
 - `delete_mealplan` - Delete an entry
 - `get_todays_mealplan` - Get today's meals
 
-**Total: 61 tools**
+**Total: 75 tools**
 
 With `MEALIE_ENABLE_AI_IMPORT=true`, `import_recipe_with_ai` adds one optional
-recipe operation: **62 total tools, including 13 recipe tools**. It is absent
+recipe operation: **76 total tools, including 14 recipe tools**. It is absent
 from discovery and cannot be called when disabled.
 
 ### Migrating consolidated tools (breaking change)

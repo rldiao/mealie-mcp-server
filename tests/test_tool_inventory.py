@@ -26,7 +26,7 @@ async def test_consolidated_inventory_matches_documentation(server):
     mcp, _ = server
     tools = await mcp.list_tools()
     names = {tool.name for tool in tools}
-    assert len(names) == len(tools) == 61
+    assert len(names) == len(tools) == 75
     assert names.isdisjoint(REMOVED_TOOLS)
     assert "import_recipe_with_ai" not in names
     assert all("import_recipe_with_ai" not in (tool.description or "") for tool in tools)
@@ -37,7 +37,7 @@ async def test_consolidated_inventory_matches_documentation(server):
     documented = re.findall(r"^- `(\w+)`", inventory, re.MULTILINE)
     assert len(documented) == len(names)
     assert set(documented) == names
-    assert "**Total: 61 tools**" in inventory
+    assert "**Total: 75 tools**" in inventory
     for tool in tools:
         for removed in REMOVED_TOOLS:
             assert not re.search(rf"\b{removed}\b", tool.description or "")

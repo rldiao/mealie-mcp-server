@@ -1,6 +1,7 @@
 from .ai_import_tools import register_ai_import_tools
 from .categories_tools import register_categories_tools
 from .foods_tools import register_foods_tools
+from .labels_tools import register_labels_tools
 from .mealplan_tools import register_mealplan_tools
 from .parser_tools import register_parser_tools
 from .recipe_tools import register_recipe_tools
@@ -16,6 +17,7 @@ def register_all_tools(mcp, mealie, *, enable_ai_import: bool = False):
     register_categories_tools(mcp, mealie)
     register_tags_tools(mcp, mealie)
     register_foods_tools(mcp, mealie)
+    register_labels_tools(mcp, mealie)
     register_units_tools(mcp, mealie)
     register_tools_tools(mcp, mealie)
     register_shopping_list_tools(mcp, mealie)
@@ -32,6 +34,7 @@ __all__ = [
     "register_categories_tools",
     "register_tags_tools",
     "register_foods_tools",
+    "register_labels_tools",
     "register_units_tools",
     "register_tools_tools",
     "register_shopping_list_tools",

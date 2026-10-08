@@ -194,12 +194,12 @@ async def test_ai_import_lazy_runtime_registration(load_server, monkeypatch, val
     monkeypatch.setenv("MEALIE_ENABLE_AI_IMPORT", value)
     namespace, _, requests, factory = load_server()
     mcp = namespace["mcp"]
-    assert len(await mcp.list_tools()) == 61
+    assert len(await mcp.list_tools()) == 75
     factory.assert_not_called()
     assert requests == []
     async with server_lifespan(mcp, transport):
         tools = await mcp.list_tools()
-        assert len(tools) == (62 if enabled else 61)
+        assert len(tools) == (76 if enabled else 75)
         assert ("import_recipe_with_ai" in {t.name for t in tools}) is enabled
         async with mcp.settings.lifespan(mcp):
             assert len(await mcp.list_tools()) == len(tools)
@@ -211,7 +211,7 @@ async def test_ai_import_explicit_configuration_discovery(load_server, enabled):
     namespace, _, requests, factory = load_server()
     config = namespace["ServerConfig"]("http://mealie.invalid", "placeholder", enable_ai_import=enabled)
     mcp = namespace["create_server"](config)
-    assert len(await mcp.list_tools()) == (62 if enabled else 61)
+    assert len(await mcp.list_tools()) == (76 if enabled else 75)
     factory.assert_not_called()
     assert requests == []
 
@@ -235,7 +235,7 @@ async def test_ai_import_main_registration(load_server, monkeypatch, transport):
     with patch.object(namespace["FastMCP"], "run", autospec=True) as run:
         namespace["main"]()
     mcp = run.call_args.args[0]
-    assert len(await mcp.list_tools()) == 62
+    assert len(await mcp.list_tools()) == 76
 
 
 @pytest.mark.parametrize(

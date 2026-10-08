@@ -92,6 +92,9 @@ class FakeFetcher(MealieFetcher):
         self.requests = []
         self.created_slug = "test-recipe"
         self.recipe = deepcopy(BASE_RECIPE)
+        self.tags = []
+        self.foods = []
+        self.labels = []
         self.responses = {}
         # url fragment -> MealieApiError to raise, for client-failure tests
         self.failures = {}
@@ -149,6 +152,17 @@ class FakeFetcher(MealieFetcher):
             ]
         if method in ("PUT", "PATCH") and resource_url == "/api/recipes":
             return deepcopy(kwargs.get("json", {}))
+        if method == "GET" and url == "/api/users/self":
+            return {
+                "id": "user-1",
+                "householdId": "household-1",
+                "email": "test@example.com",
+            }
+        if method == "GET" and resource_url == "/api/foods":
+            food_id = url.rsplit("/", 1)[-1]
+            existing = next((f for f in self.foods if f["id"] == food_id), None)
+            if existing is not None:
+                return dict(existing)
         # single-record GET (the fetch-merge update path reads the existing record)
         if method == "GET" and resource_url in (
             "/api/foods",
@@ -168,6 +182,51 @@ class FakeFetcher(MealieFetcher):
         if method == "GET" and resource_url == "/api/organizers/tags":
             item_id = url.rsplit("/", 1)[-1]
             return {"id": item_id, "name": "Tag", "slug": "tag"}
+        if method == "GET" and url == "/api/organizers/tags":
+            search = (kwargs.get("params") or {}).get("search")
+            items = self.tags
+            if search:
+                items = [t for t in items if search.lower() in t["name"].lower()]
+            return {"items": items, "page": 1, "perPage": 50, "total": len(items)}
+        if method == "POST" and url == "/api/organizers/tags":
+            name = (kwargs.get("json") or {}).get("name")
+            tag = {
+                "id": f"tag-{len(self.tags) + 1}",
+                "name": name,
+                "slug": name.lower().replace(" ", "-"),
+            }
+            self.tags.append(tag)
+            return tag
+        if method == "GET" and url == "/api/groups/labels":
+            search = (kwargs.get("params") or {}).get("search")
+            items = self.labels
+            if search:
+                items = [lbl for lbl in items if search.lower() in lbl["name"].lower()]
+            return {"items": items, "page": 1, "perPage": 50, "total": len(items)}
+        if method == "POST" and url == "/api/groups/labels":
+            payload = kwargs.get("json") or {}
+            label = {
+                "color": "#959595",
+                **payload,
+                "id": f"label-{len(self.labels) + 1}",
+            }
+            self.labels.append(label)
+            return label
+        if method == "GET" and url.startswith("/api/groups/labels/"):
+            label_id = url.rsplit("/", 1)[-1]
+            existing = next((lbl for lbl in self.labels if lbl["id"] == label_id), None)
+            if existing is not None:
+                return dict(existing)
+            return {"id": label_id, "name": "Existing", "color": "#959595"}
+        if method == "PUT" and url.startswith("/api/groups/labels/"):
+            label_id = url.rsplit("/", 1)[-1]
+            updated = kwargs.get("json", {})
+            for i, lbl in enumerate(self.labels):
+                if lbl["id"] == label_id:
+                    self.labels[i] = {**lbl, **updated}
+                    updated = self.labels[i]
+                    break
+            return updated
         if method == "GET" and resource_url == "/api/households/mealplans":
             return {
                 "id": url.rsplit("/", 1)[-1],
@@ -184,9 +243,33 @@ class FakeFetcher(MealieFetcher):
                 "userId": "user-1",
                 "name": "Existing list",
             }
+        # foods list/create are backed by an in-memory store so search/match
+        # flows (e.g. set_foods_on_hand_by_name) can be exercised end-to-end
+        if method == "GET" and url == "/api/foods":
+            search = (kwargs.get("params") or {}).get("search")
+            items = self.foods
+            if search:
+                items = [f for f in items if search.lower() in f["name"].lower()]
+            return {"items": items, "page": 1, "perPage": 50, "total": len(items)}
+        if method == "POST" and url == "/api/foods":
+            payload = kwargs.get("json") or {}
+            food = {
+                **payload,
+                "id": f"food-{len(self.foods) + 1}",
+                "householdsWithIngredientFood": [],
+            }
+            self.foods.append(food)
+            return food
+        if method == "PUT" and url.startswith("/api/foods/"):
+            food_id = url.rsplit("/", 1)[-1]
+            updated = kwargs.get("json", {})
+            for i, f in enumerate(self.foods):
+                if f["id"] == food_id:
+                    self.foods[i] = updated
+                    break
+            return updated
         # list endpoints
         if method == "GET" and url in (
-            "/api/foods",
             "/api/units",
             "/api/organizers/tools",
             "/api/organizers/categories",
@@ -203,7 +286,6 @@ class FakeFetcher(MealieFetcher):
             }
         # create echoes the body with a generated id
         if method == "POST" and url in (
-            "/api/foods",
             "/api/units",
             "/api/organizers/tools",
             "/api/organizers/categories",
@@ -233,6 +315,7 @@ class FakeFetcher(MealieFetcher):
             "/api/organizers/tags",
             "/api/households/mealplans",
             "/api/households/shopping/lists",
+            "/api/groups/labels",
         ):
             return {"success": True, "message": "Operation completed successfully"}
         raise AssertionError(f"Unhandled fake request: {method} {url}")
