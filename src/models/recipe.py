@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -173,6 +173,67 @@ class RecipeIngredientSubstitutionInput(BaseModel):
         if not self.substituteFoodId and not self.note:
             raise ValueError("a substitution needs a substituteFoodId, a note, or both")
         return self
+
+
+NUTRITION_FIELDS = (
+    "calories",
+    "proteinContent",
+    "carbohydrateContent",
+    "fatContent",
+    "saturatedFatContent",
+    "unsaturatedFatContent",
+    "transFatContent",
+    "fiberContent",
+    "sugarContent",
+    "sodiumContent",
+    "cholesterolContent",
+)
+
+
+class RecipeNutritionInput(BaseModel):
+    """Per-serving macros and nutrients for a recipe.
+
+    Give numbers without units; Mealie labels them when displaying
+    (calories as kcal, sodium and cholesterol in mg, the rest in g).
+    Fields left out keep their current value; null clears one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    calories: Optional[Union[str, float]] = Field(default=None, description="Energy, e.g. 450.")
+    proteinContent: Optional[Union[str, float]] = Field(default=None, description="Protein in g.")
+    carbohydrateContent: Optional[Union[str, float]] = Field(default=None, description="Carbohydrate in g.")
+    fatContent: Optional[Union[str, float]] = Field(default=None, description="Total fat in g.")
+    saturatedFatContent: Optional[Union[str, float]] = Field(default=None, description="Saturated fat in g.")
+    unsaturatedFatContent: Optional[Union[str, float]] = Field(default=None, description="Unsaturated fat in g.")
+    transFatContent: Optional[Union[str, float]] = Field(default=None, description="Trans fat in g.")
+    fiberContent: Optional[Union[str, float]] = Field(default=None, description="Fibre in g.")
+    sugarContent: Optional[Union[str, float]] = Field(default=None, description="Sugar in g.")
+    sodiumContent: Optional[Union[str, float]] = Field(default=None, description="Sodium in mg.")
+    cholesterolContent: Optional[Union[str, float]] = Field(default=None, description="Cholesterol in mg.")
+
+    @field_validator(*NUTRITION_FIELDS)
+    @classmethod
+    def _to_mealie_string(cls, value: Optional[Union[str, float]]) -> Optional[str]:
+        """Mealie stores nutrition values as strings; 32.0 becomes "32"."""
+        if value is None:
+            return None
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return format(value, "g")
+        return value.strip() or None
+
+    @model_validator(mode="after")
+    def _require_a_field(self) -> "RecipeNutritionInput":
+        if not self.model_fields_set:
+            raise ValueError("nutrition needs at least one field")
+        return self
+
+    def merged_into(self, existing: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Return existing nutrition with only the fields set here replaced."""
+        merged = dict(existing or {})
+        for field in self.model_fields_set:
+            merged[field] = getattr(self, field)
+        return merged
 
 
 class RecipeNoteInput(BaseModel):

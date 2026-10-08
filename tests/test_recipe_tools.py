@@ -350,3 +350,71 @@ async def test_create_recipe_full_sets_notes(invoke, fetcher):
     )
     body = fetcher.last("PUT", "/api/recipes/")["json"]
     assert body["notes"] == [{"title": "Serving", "text": "Chill the bowl first."}]
+
+
+async def test_patch_recipe_merges_nutrition_and_shows_it(invoke, fetcher):
+    fetcher.recipe = {
+        **fetcher.recipe,
+        "nutrition": {"calories": "400", "fatContent": "20", "sodiumContent": "300"},
+        "settings": {"public": True, "showNutrition": False},
+    }
+
+    await invoke(
+        "patch_recipe",
+        slug="test-recipe",
+        nutrition={
+            "calories": 450,
+            "proteinContent": 32.5,
+            "carbohydrateContent": "40",
+            "sodiumContent": None,
+        },
+    )
+
+    call = fetcher.last("PATCH", "/api/recipes/")
+    assert call["url"] == "/api/recipes/test-recipe"
+    assert call["json"] == {
+        "nutrition": {
+            "calories": "450",
+            "fatContent": "20",
+            "sodiumContent": None,
+            "proteinContent": "32.5",
+            "carbohydrateContent": "40",
+        },
+        "settings": {"public": True, "showNutrition": True},
+    }
+
+
+async def test_patch_recipe_rejects_empty_or_unknown_nutrition(invoke, fetcher):
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    with pytest.raises(ToolError):
+        await invoke("patch_recipe", slug="test-recipe", nutrition={})
+    with pytest.raises(ToolError):
+        await invoke("patch_recipe", slug="test-recipe", nutrition={"protein": 30})
+    assert fetcher.last("PATCH", "/api/recipes/") is None
+
+
+async def test_patch_recipe_nutrition_surfaces_client_failure(invoke, fetcher):
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("mealie down")
+
+    fetcher.patch_recipe = boom
+    with pytest.raises(ToolError):
+        await invoke("patch_recipe", slug="test-recipe", nutrition={"calories": 1})
+
+
+async def test_create_recipe_full_sets_nutrition(invoke, fetcher):
+    await invoke(
+        "create_recipe_full",
+        name="Salad",
+        nutrition={"calories": 320, "proteinContent": 12, "fatContent": 18.5},
+    )
+    body = fetcher.last("PUT", "/api/recipes/")["json"]
+    assert body["nutrition"] == {
+        "calories": "320",
+        "proteinContent": "12",
+        "fatContent": "18.5",
+    }
+    assert body["settings"]["showNutrition"] is True
