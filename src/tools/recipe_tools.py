@@ -252,6 +252,40 @@ def _create_populated_recipe(
     return updated
 
 
+def _update_summary(
+    slug: str, result: Any, updated_fields: List[str], **extra: Any
+) -> Dict[str, Any]:
+    """Compact confirmation of a recipe write, instead of the full recipe."""
+    recipe = result if isinstance(result, dict) else {}
+    return {
+        "success": True,
+        "slug": recipe.get("slug") or slug,
+        "name": recipe.get("name"),
+        "updated_fields": updated_fields,
+        **extra,
+    }
+
+
+def _organizer_names(recipe: Any, key: str) -> List[str]:
+    items = recipe.get(key) if isinstance(recipe, dict) else None
+    return [item.get("name") for item in items or [] if isinstance(item, dict)]
+
+
+def _patch_recipe_metadata(
+    mealie: MealieFetcher, slug: str, recipe_data: Dict[str, Any]
+) -> Any:
+    patch = dict(recipe_data)
+    if "settings" in patch:
+        # Mealie drops some toggles omitted from a settings PATCH and
+        # replaces the whole nutrition object, so send complete objects
+        # built from the recipe's current ones
+        current = mealie.get_recipe(slug)
+        for key in ("nutrition", "settings"):
+            if key in patch:
+                patch[key] = {**(current.get(key) or {}), **patch[key]}
+    return mealie.patch_recipe(slug, patch)
+
+
 def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     """Register all recipe-related tools with the MCP server."""
 
@@ -481,6 +515,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         settings: Optional[RecipeSettingsInput] = None,
         ingredients: Optional[List[Union[str, RecipeIngredientInput]]] = None,
         instructions: Optional[List[Union[str, RecipeInstructionInput]]] = None,
+        return_recipe: bool = False,
     ) -> Dict[str, Any]:
         """Partially update a recipe (only updates provided fields).
 
@@ -523,9 +558,14 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 it sets substitutions itself ([] removes them).
             instructions: Step strings and/or structured objects, as in
                 create_recipe. Replaces the instruction list when provided.
+            return_recipe: Return the full updated recipe instead of a compact
+                {success, slug, name, updated_fields} summary. Leave False
+                unless you need to inspect the result; use the returned slug
+                for later calls, as a rename can change it.
 
         Returns:
-            Dict[str, Any]: The updated recipe details.
+            Dict[str, Any]: A compact summary, or the full updated recipe when
+            return_recipe is True.
         """
         with tool_error_boundary("Error updating recipe"):
             recipe_data = _recipe_changes(
@@ -550,22 +590,14 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 raise ValueError("At least one field must be provided to update")
             if ingredients is not None or instructions is not None:
                 current = mealie.get_recipe(slug)
-                return mealie.update_recipe(
+                result = mealie.update_recipe(
                     slug, _compose_recipe(current, recipe_data)
                 )
-            if "settings" in recipe_data:
-                # Mealie drops some toggles omitted from a settings PATCH and
-                # replaces the whole nutrition object, so send complete objects
-                # built from the recipe's current ones
-                current = mealie.get_recipe(slug)
-                for key in ("nutrition", "settings"):
-                    if key in recipe_data:
-                        recipe_data[key] = {
-                            **(current.get(key) or {}),
-                            **recipe_data[key],
-                        }
-
-            return mealie.patch_recipe(slug, recipe_data)
+            else:
+                result = _patch_recipe_metadata(mealie, slug, recipe_data)
+            if return_recipe:
+                return result
+            return _update_summary(slug, result, list(recipe_data))
 
     @mcp.tool()
     def duplicate_recipe(slug: str, name: Optional[str] = None) -> Dict[str, Any]:
@@ -582,17 +614,23 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             return mealie.duplicate_recipe(slug, name)
 
     @mcp.tool()
-    def mark_recipe_last_made(slug: str) -> Dict[str, Any]:
+    def mark_recipe_last_made(slug: str, return_recipe: bool = False) -> Dict[str, Any]:
         """Mark a recipe as having been made today (updates last made timestamp).
 
         Args:
             slug: The unique text identifier for the recipe.
+            return_recipe: Return the full updated recipe instead of a compact
+                summary.
 
         Returns:
-            Dict[str, Any]: The updated recipe details.
+            Dict[str, Any]: A compact summary, or the full updated recipe when
+            return_recipe is True.
         """
         with tool_error_boundary("Error updating recipe last made"):
-            return mealie.update_recipe_last_made(slug)
+            result = mealie.update_recipe_last_made(slug)
+            if return_recipe:
+                return result
+            return _update_summary(slug, result, ["lastMade"])
 
     @mcp.tool()
     def set_recipe_image_from_url(slug: str, image_url: str) -> Dict[str, Any]:
@@ -671,7 +709,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             )
 
     @mcp.tool()
-    def add_recipe_tags(slug: str, tags: List[str]) -> Dict[str, Any]:
+    def add_recipe_tags(
+        slug: str, tags: List[str], return_recipe: bool = False
+    ) -> Dict[str, Any]:
         """Add one or more tags to a recipe, keeping any tags it already has.
 
         Unlike update_recipe_categories_and_tags (which replaces the whole tag list), this is
@@ -684,18 +724,27 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             slug: The unique text identifier for the recipe.
             tags: Tag names to add, e.g. ["Quick", "Healthy"]. An empty list
                 is rejected with an error rather than treated as a no-op.
+            return_recipe: Return the full updated recipe instead of a compact
+                summary listing the recipe's tags.
 
         Returns:
-            Dict[str, Any]: The updated recipe details.
+            Dict[str, Any]: A compact summary (including the resulting tag
+            names), or the full updated recipe when return_recipe is True.
         """
         with tool_error_boundary("Error adding recipe tags"):
-            return mealie.add_recipe_tags(slug, tags)
+            result = mealie.add_recipe_tags(slug, tags)
+            if return_recipe:
+                return result
+            return _update_summary(
+                slug, result, ["tags"], tags=_organizer_names(result, "tags")
+            )
 
     @mcp.tool()
     def update_recipe_categories_and_tags(
         slug: str,
         category_ids: Optional[List[str]] = None,
         tag_ids: Optional[List[str]] = None,
+        return_recipe: bool = False,
     ) -> Dict[str, Any]:
         """Update categories and/or tags for a recipe in a single API call.
         Use get_categories() and get_tags() first to find valid IDs.
@@ -705,12 +754,25 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             slug: The unique text identifier for the recipe.
             category_ids: List of category UUIDs to assign (omit to leave unchanged).
             tag_ids: List of tag UUIDs to assign (omit to leave unchanged).
+            return_recipe: Return the full updated recipe instead of a compact
+                summary listing the resulting category and tag names.
 
         Returns:
-            Dict[str, Any]: The updated recipe details.
+            Dict[str, Any]: A compact summary, or the full updated recipe when
+            return_recipe is True.
         """
         with tool_error_boundary("Error updating recipe categories and tags"):
-            return mealie.set_recipe_categories_and_tags(slug, category_ids=category_ids, tag_ids=tag_ids)
+            result = mealie.set_recipe_categories_and_tags(
+                slug, category_ids=category_ids, tag_ids=tag_ids
+            )
+            if return_recipe:
+                return result
+            fields = {}
+            if category_ids is not None:
+                fields["recipeCategory"] = _organizer_names(result, "recipeCategory")
+            if tag_ids is not None:
+                fields["tags"] = _organizer_names(result, "tags")
+            return _update_summary(slug, result, list(fields), **fields)
 
     @mcp.tool()
     def delete_recipe(slug: str) -> Dict[str, Any]:

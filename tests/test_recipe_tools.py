@@ -556,6 +556,7 @@ async def test_update_recipe_combines_content_and_metadata(
         description="New description",
         nutrition={"calories": "200"},
         settings={"showAssets": False},
+        return_recipe=True,
         **arguments,
     )
     assert result["name"] == "Updated"
@@ -944,7 +945,7 @@ async def test_import_fetch_failure_exposes_created_slug(invoke, fetcher, monkey
     "tool_name,arguments,method",
     [
         ("create_recipe", {"name": "Recipe"}, "PUT"),
-        ("update_recipe", {"slug": "test-recipe"}, "PATCH"),
+        ("update_recipe", {"slug": "test-recipe", "return_recipe": True}, "PATCH"),
     ],
 )
 async def test_authoring_accepts_fractional_servings(
@@ -1106,3 +1107,104 @@ def test_recipe_api_upload_logs_exclude_filenames_and_identifiers(fetcher, caplo
     fetcher.upload_recipe_asset("private-slug", b"private-content", "private-file.pdf")
     for private in ("private-slug", "private-content", "private-file"):
         assert private not in caplog.text
+
+
+# --- compact update responses -------------------------------------------------
+
+
+async def test_update_recipe_returns_compact_summary_by_default(invoke, fetcher):
+    result = await invoke(
+        "update_recipe", slug="test-recipe", name="Renamed", servings=4
+    )
+
+    assert result == {
+        "success": True,
+        "slug": fetcher.recipe["slug"],
+        "name": "Renamed",
+        "updated_fields": ["name", "recipeServings"],
+    }
+
+
+async def test_update_recipe_summary_reports_slug_from_response(invoke, fetcher):
+    fetcher.responses["PATCH", "/api/recipes/old-slug"] = {
+        "slug": "new-slug",
+        "name": "New Name",
+    }
+
+    result = await invoke("update_recipe", slug="old-slug", name="New Name")
+
+    assert result["slug"] == "new-slug"
+
+
+async def test_update_recipe_content_summary_lists_content_fields(invoke, fetcher):
+    result = await invoke(
+        "update_recipe", slug="test-recipe", ingredients=["1 egg"], instructions=[]
+    )
+
+    assert fetcher.last("PUT", "/api/recipes/test-recipe") is not None
+    assert result["success"] is True
+    assert set(result["updated_fields"]) == {"recipeIngredient", "recipeInstructions"}
+    assert "recipeIngredient" not in result
+
+
+async def test_add_recipe_tags_returns_tag_names_by_default(invoke, fetcher):
+    result = await invoke("add_recipe_tags", slug="test-recipe", tags=["Healthy"])
+
+    assert result["success"] is True
+    assert result["updated_fields"] == ["tags"]
+    assert "Healthy" in result["tags"]
+    assert "recipeIngredient" not in result
+
+
+async def test_add_recipe_tags_can_return_full_recipe(invoke, fetcher):
+    result = await invoke(
+        "add_recipe_tags", slug="test-recipe", tags=["Healthy"], return_recipe=True
+    )
+
+    # the fake PATCH echoes its body, so the raw Mealie response comes back
+    assert result == fetcher.last("PATCH", "/api/recipes/test-recipe")["json"]
+
+
+async def test_categories_and_tags_summary_only_reports_changed_lists(invoke, fetcher):
+    fetcher.responses["PATCH", "/api/recipes/recipe"] = {
+        "slug": "recipe",
+        "name": "Recipe",
+        "recipeCategory": [{"id": "cat-1", "name": "Dinner"}],
+        "tags": [{"id": "tag-1", "name": "Quick"}],
+    }
+
+    result = await invoke(
+        "update_recipe_categories_and_tags", slug="recipe", category_ids=["cat-1"]
+    )
+
+    assert result == {
+        "success": True,
+        "slug": "recipe",
+        "name": "Recipe",
+        "updated_fields": ["recipeCategory"],
+        "recipeCategory": ["Dinner"],
+    }
+
+
+async def test_mark_recipe_last_made_returns_summary(invoke, fetcher):
+    fetcher.responses["PATCH", "/api/recipes/test-recipe/last-made"] = {
+        "slug": "test-recipe",
+        "name": "Test",
+        "recipeIngredient": [],
+    }
+
+    result = await invoke("mark_recipe_last_made", slug="test-recipe")
+
+    assert result == {
+        "success": True,
+        "slug": "test-recipe",
+        "name": "Test",
+        "updated_fields": ["lastMade"],
+    }
+
+
+async def test_compact_summary_not_returned_on_failure(invoke, fetcher):
+    fetcher.fail_on("/api/recipes/test-recipe")
+
+    with pytest.raises(ToolError):
+        await invoke("update_recipe", slug="test-recipe", name="X")

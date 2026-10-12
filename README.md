@@ -219,6 +219,12 @@ See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooti
 - `add_recipe_tags` - Add tags by name, keeping existing ones (auto-creates unknown names)
 - `delete_recipe` - Delete recipe
 
+`update_recipe`, `mark_recipe_last_made`, `update_recipe_categories_and_tags`,
+and `add_recipe_tags` return a compact `{success, slug, name, updated_fields}`
+summary to save context; the organizer tools also list the resulting tag and
+category names. Pass `return_recipe=true` to get the full updated recipe instead.
+Use the returned `slug` for later calls, because a rename can change it.
+
 ### Shopping List Tools (15 operations)
 
 - `get_shopping_lists` - List all shopping lists

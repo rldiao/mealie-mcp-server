@@ -66,7 +66,9 @@ async def test_create_recipe_returns_full_recipe(invoke):
 
 
 async def test_update_recipe_returns_updated_fields(invoke):
-    out = await invoke("update_recipe", slug="r", servings=4, prep_time="10 min")
+    out = await invoke(
+        "update_recipe", slug="r", servings=4, prep_time="10 min", return_recipe=True
+    )
     assert out["recipeServings"] == 4
     assert out["prepTime"] == "10 min"
 
