@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
 
@@ -95,6 +95,39 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 raise ValueError("At least one field must be provided to update")
 
             return mealie.update_tool(tool_id, tool_data)
+
+    @mcp.tool()
+    def set_tool_on_hand(tool_id: str, on_hand: bool = True) -> Dict[str, Any]:
+        """Mark or unmark a tool as owned (on hand) by the current household.
+
+        Args:
+            tool_id: The UUID of the tool.
+            on_hand: True to mark owned, False to clear it. Defaults to True.
+
+        Returns:
+            Dict[str, Any]: The updated tool.
+        """
+        with tool_error_boundary("Error setting tool on-hand status"):
+            return mealie.set_tool_on_hand(tool_id, on_hand=on_hand)
+
+    @mcp.tool()
+    def mark_tools_on_hand(names: List[str], on_hand: bool = True) -> Dict[str, Any]:
+        """Mark or unmark kitchen tools the household owns, by name.
+
+        Use this instead of set_tool_on_hand when you know tool names (e.g.
+        "Stand Mixer", "Dutch Oven", "Food Processor") but not their Mealie
+        tool IDs. Names are matched case-insensitively against existing
+        tools; a name with no match is created as a new tool.
+
+        Args:
+            names: Tool names to update.
+            on_hand: True to mark owned, False to clear it. Defaults to True.
+
+        Returns:
+            Dict[str, Any]: {"updated": [...updated tools], "created": [...names of tools that were created]}.
+        """
+        with tool_error_boundary("Error marking tools on-hand"):
+            return mealie.set_tools_on_hand_by_name(names, on_hand=on_hand)
 
     @mcp.tool()
     def delete_tool(tool_id: str) -> Dict[str, Any]:

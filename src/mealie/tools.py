@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from utils import format_api_params
 
@@ -134,3 +134,88 @@ class ToolsMixin:
 
         logger.info({"message": "Deleting tool"})
         return self._handle_request("DELETE", f"/api/organizers/tools/{tool_id}")
+
+    def set_tool_on_hand(self, tool_id: str, on_hand: bool = True) -> Dict[str, Any]:
+        """Mark or unmark a tool as owned (on hand) by the current household.
+
+        Mealie tracks ownership per household via the ``householdsWithTool``
+        list on the tool record rather than a single global boolean, so this
+        fetches the current household id, then fetch-merges the tool
+        (Mealie's PUT replaces the whole record).
+
+        Args:
+            tool_id: The UUID of the tool
+            on_hand: True to mark owned by the current household, False to clear it
+
+        Returns:
+            JSON response containing the updated tool
+        """
+        if not tool_id:
+            raise ValueError("Tool ID cannot be empty")
+
+        existing = self.get_tool(tool_id)
+        household_id = self._current_household_id()
+
+        logger.info({"message": "Setting tool on-hand status"})
+        return self._put_tool_households(existing, household_id, on_hand)
+
+    def set_tools_on_hand_by_name(
+        self, names: List[str], on_hand: bool = True
+    ) -> Dict[str, Any]:
+        """Mark or unmark tools as owned by name, creating missing tools.
+
+        Names are matched case-insensitively against existing tools; a name
+        with no match is created as a new tool before being marked owned.
+
+        Args:
+            names: Tool names to update (created in Mealie if they don't exist)
+            on_hand: True to mark owned by the current household, False to clear it
+
+        Returns:
+            Dict with "updated" (the updated tool records) and "created"
+            (names of tools that had to be created)
+        """
+        if not names:
+            raise ValueError("Tool names cannot be empty")
+
+        logger.info({"message": "Marking tools on-hand"})
+
+        household_id = self._current_household_id()
+        updated = []
+        created = []
+
+        for raw_name in names:
+            name = raw_name.strip()
+            if not name:
+                continue
+
+            matches = self.get_tools(search=name).get("items", [])
+            tool = next(
+                (t for t in matches if (t.get("name") or "").lower() == name.lower()),
+                None,
+            )
+            if tool is None:
+                tool = self.create_tool(name)
+                created.append(name)
+
+            updated.append(self._put_tool_households(tool, household_id, on_hand))
+
+        return {"updated": updated, "created": created}
+
+    def _current_household_id(self) -> str:
+        household_id = self.get_current_user().get("householdId")
+        if not household_id:
+            raise ValueError("Could not determine the current household")
+        return household_id
+
+    def _put_tool_households(
+        self, tool: Dict[str, Any], household_id: str, on_hand: bool
+    ) -> Dict[str, Any]:
+        households = [h for h in tool.get("householdsWithTool") or [] if h != household_id]
+        if on_hand:
+            households.append(household_id)
+
+        merged = {**tool, "householdsWithTool": households}
+        return self._handle_request(
+            "PUT", f"/api/organizers/tools/{tool['id']}", json=merged
+        )

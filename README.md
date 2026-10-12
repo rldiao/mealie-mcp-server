@@ -293,6 +293,8 @@ See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooti
 - `create_tool` - Create a new tool
 - `get_tool` - Get by exactly one of `tool_id` or `tool_slug`
 - `update_tool` - Update tool
+- `set_tool_on_hand` - Mark/unmark a tool as owned (by ID) by the current household
+- `mark_tools_on_hand` - Mark/unmark owned tools by name, creating missing tools
 - `delete_tool` - Delete tool
 
 ### Parser Tools (1 operation)
@@ -308,10 +310,10 @@ See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooti
 - `delete_mealplan` - Delete an entry
 - `get_todays_mealplan` - Get today's meals
 
-**Total: 75 tools**
+**Total: 77 tools**
 
 With `MEALIE_ENABLE_AI_IMPORT=true`, `import_recipe_with_ai` adds one optional
-recipe operation: **76 total tools, including 14 recipe tools**. It is absent
+recipe operation: **78 total tools, including 14 recipe tools**. It is absent
 from discovery and cannot be called when disabled.
 
 ### Migrating consolidated tools (breaking change)
