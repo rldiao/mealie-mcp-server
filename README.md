@@ -557,6 +557,21 @@ recovery information identifying completed work. Inspect that information and
 the current Mealie state rather than blindly retrying the entire operation.
 A failed or timed-out request may have completed remotely.
 
+### Imports from Your Own Network Fail on Mealie 3.26+
+
+Since 3.26, Mealie only fetches public internet addresses on your behalf. That
+covers `import_recipe_from_url`, `set_recipe_image_from_url`, and image URLs on
+`create_recipe`. Requests to a host on your LAN or a Tailscale address fail
+unless you allow it on the Mealie server, e.g. `HTTP_ALLOW_LIST=100.64.0.0/10`.
+See Mealie's [security settings](https://docs.mealie.io/documentation/getting-started/installation/backend-config/#security).
+
+### Newer Mealie Fields
+
+Structured recipe times, `recipe_scale` on meal plans, food substitutions,
+note-to-step links, organizer merges, and the iCal feed need the Mealie version
+that introduced them (3.25 to 3.29). On older servers, the tools that call a
+new endpoint fail with an HTTP error, and new fields may be ignored.
+
 ## Support and Contributing
 
 - Check the [changelog](CHANGELOG.md) for changes and migration notes.
