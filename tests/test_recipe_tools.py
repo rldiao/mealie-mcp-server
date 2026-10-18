@@ -5,6 +5,7 @@ import json
 import logging
 import uuid
 from copy import deepcopy
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
@@ -798,3 +799,13 @@ def test_recipe_api_upload_logs_exclude_filenames_and_identifiers(fetcher, caplo
     fetcher.upload_recipe_asset("private-slug", b"private-content", "private-file.pdf")
     for private in ("private-slug", "private-content", "private-file"):
         assert private not in caplog.text
+
+
+def test_last_made_default_timestamp_is_utc_with_z_suffix(fetcher):
+    fetcher.responses["PATCH", "/api/recipes/test-recipe/last-made"] = {}
+    fetcher.update_recipe_last_made("test-recipe")
+    timestamp = fetcher.last("PATCH")["json"]["timestamp"]
+    assert timestamp.endswith("Z")
+    parsed = datetime.fromisoformat(timestamp)
+    assert parsed.utcoffset() == timedelta(0)
+    assert abs(datetime.now(UTC) - parsed) < timedelta(minutes=1)
