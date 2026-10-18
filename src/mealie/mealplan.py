@@ -53,6 +53,7 @@ class MealplanMixin:
         recipe_id: Optional[str] = None,
         title: Optional[str] = None,
         entry_type: str = "breakfast",
+        recipe_scale: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Create a new mealplan entry.
 
@@ -61,6 +62,7 @@ class MealplanMixin:
             recipe_id: UUID of the recipe to add to the mealplan (optional)
             title: Title for the mealplan entry if not using a recipe (optional)
             entry_type: Type of mealplan entry (breakfast, lunch, dinner, etc.)
+            recipe_scale: Serving multiplier for the recipe (Mealie defaults to 1)
 
         Returns:
             JSON response containing the created mealplan entry
@@ -70,7 +72,11 @@ class MealplanMixin:
             MealieApiError: If the API request fails
         """
         entry = MealPlanEntry(
-            date=date, recipe_id=recipe_id, title=title, entry_type=entry_type
+            date=date,
+            recipe_id=recipe_id,
+            title=title,
+            entry_type=entry_type,
+            recipe_scale=recipe_scale,
         )
 
         # Build the request payload
@@ -83,6 +89,8 @@ class MealplanMixin:
             payload["recipeId"] = entry.recipe_id
         if entry.title:
             payload["title"] = entry.title
+        if entry.recipe_scale is not None:
+            payload["recipeScale"] = entry.recipe_scale
 
         logger.info({"message": "Creating mealplan entry"})
         return self._handle_request("POST", "/api/households/mealplans", json=payload)

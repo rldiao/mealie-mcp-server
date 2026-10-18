@@ -46,6 +46,7 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         recipe_id: Optional[str] = None,
         title: Optional[str] = None,
         entry_type: str = "breakfast",
+        recipe_scale: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Create a new meal plan entry.
 
@@ -54,6 +55,8 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             recipe_id: UUID of the recipe to add to the mealplan (optional)
             title: Title for the mealplan entry if not using a recipe (optional)
             entry_type: Type of mealplan entry (breakfast, lunch, dinner, side)
+            recipe_scale: Serving multiplier for the recipe, e.g. 2 to cook a
+                double batch (optional; Mealie defaults to 1)
 
         Returns:
             Dict[str, Any]: JSON response containing the created mealplan entry
@@ -64,6 +67,7 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 recipe_id=recipe_id,
                 title=title,
                 entry_type=entry_type,
+                recipe_scale=recipe_scale,
             )
 
     @mcp.tool()
@@ -81,6 +85,7 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 - recipe_id (str, optional): UUID of the recipe
                 - title (str, optional): Title for the entry
                 - entry_type (str, optional): Type of entry (breakfast, lunch, dinner, side)
+                - recipe_scale (float, optional): Serving multiplier for the recipe
 
         Returns:
             Dict[str, Any]: JSON response with success message
@@ -109,12 +114,14 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         recipe_id: Optional[str] = None,
         title: Optional[str] = None,
         entry_type: Optional[str] = None,
+        recipe_scale: Optional[float] = None,
         clear_recipe: bool = False,
     ) -> Dict[str, Any]:
         """Update selected fields; clear_recipe removes the linked recipe.
 
         Omitted or null arguments leave fields unchanged. clear_recipe cannot
-        be combined with a replacement recipe_id.
+        be combined with a replacement recipe_id. recipe_scale is the serving
+        multiplier for the recipe, e.g. 2 for a double batch.
         """
         with tool_error_boundary("Error updating mealplan entry"):
             if clear_recipe and recipe_id is not None:
@@ -130,6 +137,8 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 entry_data["title"] = title
             if entry_type is not None:
                 entry_data["entryType"] = entry_type
+            if recipe_scale is not None:
+                entry_data["recipeScale"] = recipe_scale
             if not entry_data:
                 raise ValueError("At least one field must be provided to update")
             return mealie.update_mealplan(entry_id, entry_data)

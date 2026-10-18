@@ -75,6 +75,8 @@ async def test_invalid_mealplan_filters_do_not_request(invoke, fetcher, dates):
         {"recipe_id": "   "},
         {"title": "  ", "recipe_id": None},
         {"title": None, "recipe_id": None},
+        {"recipe_scale": 0},
+        {"recipe_scale": -1},
     ],
 )
 @pytest.mark.parametrize("bulk", [False, True])
@@ -116,6 +118,23 @@ async def test_single_and_bulk_mealplan_payloads_and_success(invoke, fetcher):
         {"date": "2026-10-02", "recipeId": "recipe-2", "entryType": "lunch"},
         {"date": "2026-10-03", "title": "Meal", "entryType": "breakfast"},
     ]
+
+
+async def test_mealplan_recipe_scale_is_sent_when_given(invoke, fetcher):
+    await invoke(
+        "create_mealplan", date="2026-10-01", recipe_id="recipe-1", recipe_scale=2
+    )
+    assert fetcher.last()["json"]["recipeScale"] == 2
+    await invoke(
+        "create_mealplan_bulk",
+        entries=[{"date": "2026-10-02", "recipe_id": "recipe-2", "recipe_scale": 0.5}],
+    )
+    assert fetcher.last()["json"]["recipeScale"] == 0.5
+
+
+async def test_mealplan_update_sets_recipe_scale_and_keeps_fields(invoke, fetcher):
+    await invoke("update_mealplan", entry_id="meal-1", recipe_scale=1.5)
+    assert fetcher.last()["json"] == {**CURRENT_MEAL, "recipeScale": 1.5}
 
 
 async def test_bulk_mealplan_failure_reports_only_completed_progress(
@@ -213,6 +232,7 @@ async def test_mealplan_update_preserves_fields_and_distinguishes_clear(
         {"clear_recipe": True, "recipe_id": "replacement"},
         {"date": "2026-02-30"},
         {"entry_type": "snack"},
+        {"recipe_scale": 0},
     ],
 )
 async def test_invalid_mealplan_updates_make_no_requests(invoke, fetcher, arguments):
@@ -244,7 +264,9 @@ async def test_typed_mealplan_bulk_tool_schema_preserves_envelope(server):
     meal_schema = schemas["create_mealplan_bulk"]
     assert "entries" in meal_schema["properties"]
     meal = meal_schema["$defs"]["MealPlanEntry"]
-    assert {"date", "recipe_id", "title", "entry_type"} <= set(meal["properties"])
+    assert {"date", "recipe_id", "title", "entry_type", "recipe_scale"} <= set(
+        meal["properties"]
+    )
     assert meal["properties"]["entry_type"]["default"] == "breakfast"
     assert meal["properties"]["entry_type"]["enum"] == ["breakfast", "lunch", "dinner", "side"]
 
