@@ -1,0 +1,20 @@
+# Disposable Mealie for the integration tests. Data lives in tmpfs, so every
+# `up` starts from a fresh instance with the default admin account.
+name: mealie-mcp-integration
+
+services:
+  mealie:
+    image: ghcr.io/mealie-recipes/mealie:${MEALIE_VERSION:-v3.29.0}
+    ports:
+      - "127.0.0.1:${MEALIE_INTEGRATION_PORT:-9926}:9000"
+    environment:
+      ALLOW_SIGNUP: "false"
+      BASE_URL: http://localhost:${MEALIE_INTEGRATION_PORT:-9926}
+      TZ: UTC
+    tmpfs:
+      - /app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/api/app/about')"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
