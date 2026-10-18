@@ -61,12 +61,17 @@ class IngredientReference(MealieResponseModel):
     referenceId: Optional[str] = None
 
 
+class NoteReference(MealieResponseModel):
+    referenceId: Optional[str] = None
+
+
 class RecipeInstruction(MealieResponseModel):
     id: Optional[str] = None
     title: Optional[str] = None
     summary: Optional[str] = None
     text: str
     ingredientReferences: List[IngredientReference] = Field(default_factory=list)
+    noteReferences: Optional[List[NoteReference]] = None
 
 
 class RecipeNutrition(MealieResponseModel):
@@ -315,6 +320,15 @@ class RecipeNoteInput(BaseModel):
 
     title: str = Field(default="", description="Heading for the note; may be empty.")
     text: str = Field(description="Body of the note.")
+    referenceId: Optional[str] = Field(
+        default=None,
+        description=(
+            "Id that instruction steps use in noteReferences to show this note "
+            "on the step (Mealie 3.26+). Any string works and is converted to "
+            "a stable UUID v4. Keep the existing referenceId from get_recipe "
+            "when rewriting notes, or steps lose the link."
+        ),
+    )
 
     @model_validator(mode="after")
     def _require_content(self) -> "RecipeNoteInput":
@@ -403,6 +417,13 @@ class RecipeInstructionInput(BaseModel):
             "referenceId set on those ingredients (Mealie requires UUID v4 here; "
             "non-v4 values are converted to a stable UUID v4 server-side). "
             "Enables Mealie's cook-mode highlighting."
+        ),
+    )
+    noteReferences: Optional[List[NoteReference]] = Field(
+        default=None,
+        description=(
+            "referenceIds of recipe notes to show on this step; must match the "
+            "referenceId set on those notes (Mealie 3.26+)."
         ),
     )
 

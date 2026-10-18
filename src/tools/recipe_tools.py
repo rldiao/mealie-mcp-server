@@ -103,7 +103,7 @@ def _normalize_references(
         if ingredient.referenceId:
             ingredient.referenceId = _coerce_reference_id(ingredient.referenceId)
     for step in instructions:
-        for ref in step.ingredientReferences:
+        for ref in [*step.ingredientReferences, *(step.noteReferences or [])]:
             if ref.referenceId:
                 ref.referenceId = _coerce_reference_id(ref.referenceId)
 
@@ -196,7 +196,10 @@ def _recipe_changes(
     if tools is not None:
         changes["tools"] = [_organizer_payload(t) for t in tools]
     if notes is not None:
-        changes["notes"] = [n.model_dump() for n in notes]
+        changes["notes"] = [n.model_dump(exclude_none=True) for n in notes]
+        for note in changes["notes"]:
+            if "referenceId" in note:
+                note["referenceId"] = _coerce_reference_id(note["referenceId"])
     if nutrition is not None:
         # Only the fields given; merged into the current values on write.
         changes["nutrition"] = nutrition.model_dump(include=nutrition.model_fields_set)
@@ -478,8 +481,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
           both) that Mealie shows as "may be replaced by".
         - An instruction string is the step text; an instruction object can
           also carry a summary (heading shown in place of "Step N"), a title
-          (section banner above the step), and ingredientReferences for
-          cook-mode highlights.
+          (section banner above the step), ingredientReferences for
+          cook-mode highlights, and noteReferences to show a recipe note on
+          that step (match the referenceId given to the note).
 
         Args:
             name: The name of the new recipe.
@@ -501,7 +505,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             instructions: Instruction strings and/or structured instruction objects.
             tags: Existing Mealie tags (id+name) to assign; look up with get_tags.
             tools: Existing Mealie tools (id+name) to assign; look up with get_tools.
-            notes: Entries for the recipe's Notes panel, each a title and text.
+            notes: Entries for the recipe's Notes panel, each a title and text,
+                plus an optional referenceId for steps to link to.
             nutrition: Per-serving macros (calories, proteinContent,
                 carbohydrateContent, fatContent, ...) as numbers without units:
                 calories in kcal, sodium and cholesterol in mg, the rest in
@@ -592,7 +597,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             notes: The full list of entries for the recipe's Notes panel, each a
                 title and text. Replaces the existing notes, so to add a note
                 read the current ones with get_recipe first and pass them
-                together with the new one; [] removes all notes.
+                together with the new one; [] removes all notes. Keep each
+                note's referenceId so steps that link to it stay linked.
             nutrition: Per-serving macros (calories, proteinContent,
                 carbohydrateContent, fatContent, ...) as numbers without units:
                 calories in kcal, sodium and cholesterol in mg, the rest in

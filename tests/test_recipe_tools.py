@@ -520,6 +520,47 @@ async def test_create_recipe_sets_notes(invoke, fetcher):
     assert body["notes"] == [{"title": "Serving", "text": "Chill the bowl first."}]
 
 
+async def test_create_recipe_links_notes_to_steps(invoke, fetcher):
+    v4 = "b2000002-0000-4000-8000-000000000002"
+    await invoke(
+        "create_recipe",
+        name="Linked",
+        notes=[
+            {"title": "Tip", "text": "Rest the dough.", "referenceId": "tip"},
+            {"text": "Freezes well.", "referenceId": v4},
+            {"text": "Unlinked."},
+        ],
+        instructions=[
+            "Mix.",
+            {"text": "Knead.", "noteReferences": [{"referenceId": "tip"}]},
+            {"text": "Bake.", "noteReferences": [{"referenceId": v4}]},
+        ],
+    )
+    body = fetcher.last("PUT", "/api/recipes/")["json"]
+    notes, steps = body["notes"], body["recipeInstructions"]
+    tip_id = notes[0]["referenceId"]
+    # a non-UUID id becomes a UUID v4 shared by the note and the step
+    assert uuid.UUID(tip_id).version == 4
+    assert steps[1]["noteReferences"] == [{"referenceId": tip_id}]
+    assert notes[1]["referenceId"] == v4
+    assert steps[2]["noteReferences"] == [{"referenceId": v4}]
+    # unlinked notes and steps leave the fields for Mealie to default
+    assert "referenceId" not in notes[2]
+    assert "noteReferences" not in steps[0]
+
+
+async def test_update_recipe_keeps_note_reference_ids(invoke, fetcher):
+    v4 = "b2000002-0000-4000-8000-000000000002"
+    await invoke(
+        "update_recipe",
+        slug="test-recipe",
+        notes=[{"text": "Freezes well.", "referenceId": v4}],
+    )
+    assert fetcher.last("PATCH", "/api/recipes/")["json"] == {
+        "notes": [{"title": "", "text": "Freezes well.", "referenceId": v4}]
+    }
+
+
 async def test_update_recipe_merges_nutrition_and_shows_it(invoke, fetcher):
     fetcher.recipe = {
         **fetcher.recipe,
