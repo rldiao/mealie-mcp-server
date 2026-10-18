@@ -251,11 +251,25 @@ class FakeFetcher(MealieFetcher):
         # foods list/create are backed by an in-memory store so search/match
         # flows (e.g. set_foods_on_hand_by_name) can be exercised end-to-end
         if method == "GET" and url == "/api/foods":
-            search = (kwargs.get("params") or {}).get("search")
-            items = self.foods
-            if search:
-                items = [f for f in items if search.lower() in f["name"].lower()]
-            return {"items": items, "page": 1, "perPage": 50, "total": len(items)}
+            params = kwargs.get("params") or {}
+            search = (params.get("search") or "").lower()
+            items = [
+                f
+                for f in self.foods
+                if search in f["name"].lower()
+                or search in (f.get("pluralName") or "").lower()
+                or any(search in a["name"].lower() for a in f.get("aliases", []))
+            ]
+            page, per_page = params.get("page", 1), params.get("perPage")
+            if not per_page:
+                return {"items": items, "page": 1, "perPage": 50, "total": len(items)}
+            return {
+                "items": items[(page - 1) * per_page : page * per_page],
+                "page": page,
+                "perPage": per_page,
+                "total": len(items),
+                "total_pages": -(-len(items) // per_page),
+            }
         if method == "POST" and url == "/api/foods":
             payload = kwargs.get("json") or {}
             food = {

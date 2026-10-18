@@ -166,7 +166,9 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Use this instead of set_food_on_hand when you know ingredient names
         (e.g. pantry staples like "Salt", "Flour", "Olive Oil") but not their
         Mealie food IDs. Names are matched case-insensitively against
-        existing foods; a name with no match is created as a new food.
+        existing foods' names, plural names, and aliases (e.g. "Scallion"
+        finds "Green Onion" if it has that alias); a name with no match is
+        created as a new food.
 
         Args:
             names: Food names to update.
@@ -177,6 +179,20 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         """
         with tool_error_boundary("Error marking foods on-hand"):
             return mealie.set_foods_on_hand_by_name(names, on_hand=on_hand)
+
+    @mcp.tool()
+    def get_on_hand_foods() -> Dict[str, Any]:
+        """List the foods the current household has marked as on-hand.
+
+        Use this to answer "what's in my pantry?" or before planning meals
+        around what is already available.
+
+        Returns:
+            Dict[str, Any]: {"household": slug, "count": n, "items": [{"id", "name", "label"}]},
+            sorted by name.
+        """
+        with tool_error_boundary("Error fetching on-hand foods"):
+            return mealie.get_on_hand_foods()
 
     @mcp.tool()
     def set_food_aliases(food_id: str, aliases: List[str]) -> Dict[str, Any]:

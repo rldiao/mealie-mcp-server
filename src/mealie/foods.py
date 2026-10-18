@@ -7,6 +7,8 @@ from .updates import merge_replacement_record
 
 logger = logging.getLogger("mealie-mcp")
 
+_ON_HAND_PAGE_SIZE = 200
+
 
 class FoodsMixin:
     """Mixin class for food-related API endpoints (/api/foods)."""
@@ -175,14 +177,69 @@ class FoodsMixin:
         logger.info({"message": "Setting food on-hand status"})
         return self._handle_request("PUT", f"/api/foods/{food_id}", json=merged)
 
+    def _find_food_by_name(self, name: str) -> Optional[Dict[str, Any]]:
+        """Find a food by name, plural name, or alias (case-insensitive).
+
+        An exact name match wins over a plural-name match, which wins over an
+        alias match, so a food that merely lists another food's name as an
+        alias never shadows that food.
+        """
+        target = name.lower()
+        matches = self.get_foods(search=name).get("items", [])
+        for matches_food in (
+            lambda f: (f.get("name") or "").lower() == target,
+            lambda f: (f.get("pluralName") or "").lower() == target,
+            lambda f: any(
+                (a.get("name") or "").lower() == target for a in f.get("aliases") or []
+            ),
+        ):
+            food = next((f for f in matches if matches_food(f)), None)
+            if food is not None:
+                return food
+        return None
+
+    def get_on_hand_foods(self) -> Dict[str, Any]:
+        """List the foods marked on-hand for the current household.
+
+        Mealie's foods endpoint can't filter on on-hand status, so this pages
+        through every food and keeps those whose
+        ``householdsWithIngredientFood`` includes the current household.
+
+        Returns:
+            Dict with "household" (slug), "count", and "items" — each
+            {"id", "name", "label"} sorted by name
+        """
+        household_slug = self._current_household_slug()
+
+        logger.info({"message": "Retrieving on-hand foods"})
+        items = []
+        page = 1
+        while True:
+            result = self.get_foods(page=page, per_page=_ON_HAND_PAGE_SIZE)
+            for food in result.get("items", []):
+                if household_slug in (food.get("householdsWithIngredientFood") or []):
+                    items.append(
+                        {
+                            "id": food.get("id"),
+                            "name": food.get("name"),
+                            "label": (food.get("label") or {}).get("name"),
+                        }
+                    )
+            if page >= (result.get("total_pages") or 1):
+                break
+            page += 1
+
+        items.sort(key=lambda f: (f["name"] or "").lower())
+        return {"household": household_slug, "count": len(items), "items": items}
+
     def set_foods_on_hand_by_name(
         self, names: List[str], on_hand: bool = True
     ) -> Dict[str, Any]:
         """Mark or unmark foods as on-hand by name, creating missing foods.
 
-        Names are matched case-insensitively against existing foods (the
-        same approach ``add_recipe_tags`` uses for tag names); a name with
-        no match is created as a new food before being marked on-hand.
+        Names are matched case-insensitively against existing foods' names,
+        plural names, and aliases; a name with no match is created as a new
+        food before being marked on-hand.
 
         Args:
             names: Food names to update (created in Mealie if they don't exist)
@@ -206,11 +263,7 @@ class FoodsMixin:
             if not name:
                 continue
 
-            matches = self.get_foods(search=name).get("items", [])
-            food = next(
-                (f for f in matches if (f.get("name") or "").lower() == name.lower()),
-                None,
-            )
+            food = self._find_food_by_name(name)
             if food is None:
                 food = self.create_food(name)
                 created.append(name)
@@ -354,7 +407,8 @@ class FoodsMixin:
     def set_food_label_by_name(self, food_name: str, label_name: str) -> Dict[str, Any]:
         """Set a food's label, resolving both by name.
 
-        The food must already exist (matched case-insensitively). The label
+        The food must already exist (matched case-insensitively by name,
+        plural name, or alias). The label
         is matched case-insensitively too, and created if no label with that
         name exists yet, mirroring the auto-create behaviour of
         ``set_foods_on_hand_by_name``.
@@ -371,15 +425,7 @@ class FoodsMixin:
         if not label_name:
             raise ValueError("Label name cannot be empty")
 
-        food_matches = self.get_foods(search=food_name).get("items", [])
-        food = next(
-            (
-                f
-                for f in food_matches
-                if (f.get("name") or "").lower() == food_name.lower()
-            ),
-            None,
-        )
+        food = self._find_food_by_name(food_name)
         if food is None:
             raise ValueError(f"No food found with name '{food_name}'")
 
@@ -421,11 +467,7 @@ class FoodsMixin:
             if not name:
                 continue
 
-            matches = self.get_foods(search=name).get("items", [])
-            food = next(
-                (f for f in matches if (f.get("name") or "").lower() == name.lower()),
-                None,
-            )
+            food = self._find_food_by_name(name)
             if food is None:
                 not_found.append(name)
                 continue

@@ -163,6 +163,25 @@ async def test_mark_foods_and_tools_on_hand_by_name(invoke, live_fetcher, unique
     assert (await invoke("get_tool", tool_id=tool_id))["householdsWithTool"]
 
 
+async def test_on_hand_by_alias_and_plural_then_list(invoke, organizer, unique):
+    food = await organizer("food", "Green Onion")
+    alias, plural = unique("Scallion"), unique("Green Onions")
+    await invoke("add_food_alias", food_id=food["id"], alias=alias)
+    await invoke("update_food", food_id=food["id"], plural_name=plural)
+
+    by_alias = await invoke("mark_foods_on_hand", names=[alias.upper()])
+    assert by_alias["created"] == []
+    assert [f["id"] for f in by_alias["updated"]] == [food["id"]]
+
+    on_hand = await invoke("get_on_hand_foods")
+    assert food["id"] in {item["id"] for item in on_hand["items"]}
+
+    by_plural = await invoke("mark_foods_on_hand", names=[plural], on_hand=False)
+    assert by_plural["created"] == []
+    on_hand = await invoke("get_on_hand_foods")
+    assert food["id"] not in {item["id"] for item in on_hand["items"]}
+
+
 async def test_update_unit_and_label_keep_other_fields(invoke, organizer):
     unit = await organizer("unit", "Tablespoon")
     await invoke("update_unit", unit_id=unit["id"], abbreviation="tbsp")

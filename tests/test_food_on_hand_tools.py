@@ -89,3 +89,116 @@ async def test_mark_foods_on_hand_clears_household(invoke, fetcher):
 async def test_mark_foods_on_hand_validates_names(invoke, fetcher):
     with pytest.raises(ToolError):
         await invoke("mark_foods_on_hand", names=[])
+
+
+async def test_mark_foods_on_hand_matches_alias_instead_of_creating(invoke, fetcher):
+    fetcher.foods = [
+        {
+            "id": "f1",
+            "name": "Green Onion",
+            "aliases": [{"name": "Scallion"}],
+            "householdsWithIngredientFood": [],
+        }
+    ]
+
+    result = await invoke("mark_foods_on_hand", names=["scallion"])
+
+    assert fetcher.last("POST", "/api/foods") is None
+    req = fetcher.last("PUT", "/api/foods/f1")
+    assert req["json"]["name"] == "Green Onion"
+    assert req["json"]["householdsWithIngredientFood"] == ["family"]
+    assert result["created"] == []
+
+
+async def test_mark_foods_on_hand_matches_plural_name(invoke, fetcher):
+    fetcher.foods = [
+        {
+            "id": "f1",
+            "name": "Egg",
+            "pluralName": "Eggs",
+            "householdsWithIngredientFood": [],
+        }
+    ]
+
+    result = await invoke("mark_foods_on_hand", names=["Eggs"])
+
+    assert fetcher.last("POST", "/api/foods") is None
+    assert result["created"] == []
+
+
+async def test_mark_foods_on_hand_prefers_exact_name_over_alias(invoke, fetcher):
+    fetcher.foods = [
+        {
+            "id": "f1",
+            "name": "Spring Onion",
+            "aliases": [{"name": "Onion"}],
+            "householdsWithIngredientFood": [],
+        },
+        {"id": "f2", "name": "Onion", "householdsWithIngredientFood": []},
+    ]
+
+    await invoke("mark_foods_on_hand", names=["onion"])
+
+    assert fetcher.last("PUT", "/api/foods/f2") is not None
+    assert fetcher.last("PUT", "/api/foods/f1") is None
+
+
+async def test_set_food_label_by_name_matches_alias(invoke, fetcher):
+    fetcher.foods = [
+        {"id": "f1", "name": "Green Onion", "aliases": [{"name": "Scallion"}]}
+    ]
+
+    await invoke("set_food_label_by_name", food_name="Scallion", label_name="Produce")
+
+    assert fetcher.last("PUT", "/api/foods/f1") is not None
+
+
+# --- get_on_hand_foods -------------------------------------------------------
+
+
+async def test_get_on_hand_foods_lists_only_current_household(invoke, fetcher):
+    fetcher.foods = [
+        {"id": "f1", "name": "Salt", "householdsWithIngredientFood": ["family"]},
+        {"id": "f2", "name": "Flour", "householdsWithIngredientFood": ["other"]},
+        {"id": "f3", "name": "Rice", "householdsWithIngredientFood": []},
+        {
+            "id": "f4",
+            "name": "Eggs",
+            "label": {"id": "l1", "name": "Dairy"},
+            "householdsWithIngredientFood": ["other", "family"],
+        },
+    ]
+
+    result = await invoke("get_on_hand_foods")
+
+    assert result == {
+        "household": "family",
+        "count": 2,
+        "items": [
+            {"id": "f4", "name": "Eggs", "label": "Dairy"},
+            {"id": "f1", "name": "Salt", "label": None},
+        ],
+    }
+    req = fetcher.last("GET", "/api/foods")
+    assert req["params"]["page"] == 1
+    assert "perPage" in req["params"]
+
+
+async def test_get_on_hand_foods_pages_through_all_foods(invoke, fetcher):
+    fetcher.foods = [
+        {"id": f"f{i}", "name": f"Food {i:03d}", "householdsWithIngredientFood": ["family"]}
+        for i in range(250)
+    ]
+
+    result = await invoke("get_on_hand_foods")
+
+    assert result["count"] == 250
+    pages = [r["params"]["page"] for r in fetcher.requests if r["url"] == "/api/foods"]
+    assert pages == [1, 2]
+
+
+async def test_get_on_hand_foods_reports_client_failure(invoke, fetcher):
+    fetcher.fail_on("/api/foods")
+
+    with pytest.raises(ToolError, match="Error fetching on-hand foods"):
+        await invoke("get_on_hand_foods")

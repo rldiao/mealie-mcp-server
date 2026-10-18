@@ -264,7 +264,7 @@ Use the returned `slug` for later calls, because a rename can change it.
 - `update_tag` - Update tag
 - `delete_tag` - Delete tag
 
-### Food Tools (15 operations)
+### Food Tools (16 operations)
 
 - `get_foods` - List/search foods (resolve IDs for structured ingredients)
 - `get_empty_foods` - Find foods no recipe uses
@@ -273,7 +273,8 @@ Use the returned `slug` for later calls, because a rename can change it.
 - `update_food` - Update food
 - `delete_food` - Delete food
 - `set_food_on_hand` - Mark/unmark a food as on-hand (by ID) for the current household
-- `mark_foods_on_hand` - Mark/unmark ingredients as on-hand by name, creating missing foods
+- `mark_foods_on_hand` - Mark/unmark ingredients as on-hand by name, plural, or alias, creating missing foods
+- `get_on_hand_foods` - List the foods the current household has on hand
 - `set_food_aliases` - Replace a food's alias list
 - `add_food_alias` - Add an alias to a food, keeping existing ones
 - `remove_food_alias` - Remove a single alias from a food
@@ -342,7 +343,7 @@ Use the returned `slug` for later calls, because a rename can change it.
 - `update_cookbook` - Change a cookbook, keeping omitted fields
 - `delete_cookbook` - Delete a cookbook (recipes are not affected)
 
-**Total: 95 tools**
+**Total: 96 tools**
 
 With `MEALIE_ENABLE_AI_IMPORT=true`, `import_recipe_with_ai` adds one optional
 recipe operation: **96 total tools, including 16 recipe tools**. It is absent
