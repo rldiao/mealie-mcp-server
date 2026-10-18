@@ -262,7 +262,7 @@ Use the returned `slug` for later calls, because a rename can change it.
 - `update_tag` - Update tag
 - `delete_tag` - Delete tag
 
-### Food Tools (14 operations)
+### Food Tools (15 operations)
 
 - `get_foods` - List/search foods (resolve IDs for structured ingredients)
 - `get_empty_foods` - Find foods no recipe uses
@@ -275,6 +275,7 @@ Use the returned `slug` for later calls, because a rename can change it.
 - `set_food_aliases` - Replace a food's alias list
 - `add_food_alias` - Add an alias to a food, keeping existing ones
 - `remove_food_alias` - Remove a single alias from a food
+- `set_food_substitutions` - Replace a food's common "may be replaced by" substitutions
 - `set_food_label` - Set or clear a food's label by ID
 - `set_food_label_by_name` - Set a food's label, resolving food and label by name
 - `set_foods_label_by_name` - Apply one label to multiple foods by name
@@ -325,10 +326,10 @@ Use the returned `slug` for later calls, because a rename can change it.
 - `delete_mealplan` - Delete an entry
 - `get_todays_mealplan` - Get today's meals
 
-**Total: 81 tools**
+**Total: 82 tools**
 
 With `MEALIE_ENABLE_AI_IMPORT=true`, `import_recipe_with_ai` adds one optional
-recipe operation: **82 total tools, including 14 recipe tools**. It is absent
+recipe operation: **83 total tools, including 14 recipe tools**. It is absent
 from discovery and cannot be called when disabled.
 
 ### Migrating consolidated tools (breaking change)

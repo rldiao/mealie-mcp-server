@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 from mcp.server.fastmcp import FastMCP
 
 from mealie import MealieFetcher
+from models.recipe import RecipeIngredientSubstitutionInput
 from tools.errors import tool_error_boundary
 
 
@@ -195,6 +196,33 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         """
         with tool_error_boundary("Error setting food aliases"):
             return mealie.set_food_aliases(food_id, aliases)
+
+    @mcp.tool()
+    def set_food_substitutions(
+        food_id: str, substitutions: List[RecipeIngredientSubstitutionInput]
+    ) -> Dict[str, Any]:
+        """Replace a food's common substitutions (Mealie 3.26+).
+
+        Common substitutions apply wherever the food is used, e.g. buttermilk
+        "may be replaced by" milk with a note "add 1 tbsp lemon juice", and the
+        recipe finder can consider them. For a swap that only applies in one
+        recipe, set substitutions on that ingredient with update_recipe. This
+        replaces the whole list; read the food with get_food first to keep
+        existing entries, or pass [] to clear them.
+
+        Args:
+            food_id: The UUID of the food.
+            substitutions: Entries with a substituteFoodId of another existing
+                food, a note, or both.
+
+        Returns:
+            Dict[str, Any]: The updated food.
+        """
+        with tool_error_boundary("Error setting food substitutions"):
+            return mealie.set_food_substitutions(
+                food_id,
+                [sub.model_dump(exclude_none=True) for sub in substitutions],
+            )
 
     @mcp.tool()
     def add_food_alias(food_id: str, alias: str) -> Dict[str, Any]:

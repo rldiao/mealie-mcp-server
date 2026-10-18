@@ -261,6 +261,33 @@ class FoodsMixin:
         logger.info({"message": "Setting food aliases"})
         return self._handle_request("PUT", f"/api/foods/{food_id}", json=merged)
 
+    def set_food_substitutions(
+        self, food_id: str, substitutions: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Replace a food's common substitutions with the given list.
+
+        Args:
+            food_id: The UUID of the food
+            substitutions: Entries with a substituteFoodId, a note, or both
+                (replaces any existing substitutions; pass an empty list to
+                clear them)
+
+        Returns:
+            JSON response containing the updated food
+        """
+        if not food_id or not food_id.strip():
+            raise ValueError("Food ID cannot be empty")
+        if substitutions is None:
+            raise ValueError("Substitutions cannot be None")
+        if any(sub.get("substituteFoodId") == food_id for sub in substitutions):
+            raise ValueError("A food cannot be substituted with itself")
+
+        existing = self.get_food(food_id)
+        merged = {**existing, "substitutions": substitutions}
+
+        logger.info({"message": "Setting food substitutions"})
+        return self._handle_request("PUT", f"/api/foods/{food_id}", json=merged)
+
     def add_food_alias(self, food_id: str, alias: str) -> Dict[str, Any]:
         """Add an alias to a food, keeping any aliases it already has.
 

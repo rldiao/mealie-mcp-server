@@ -228,7 +228,7 @@ class Recipe(MealieResponseModel):
 
 
 class RecipeIngredientSubstitutionInput(BaseModel):
-    """One "may be replaced by" option for a recipe ingredient.
+    """One "may be replaced by" option for a food or a recipe ingredient.
 
     Set a substitute food, a note, or both, e.g. a food plus "use half".
     """
