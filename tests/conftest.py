@@ -127,6 +127,8 @@ class FakeFetcher(MealieFetcher):
             return self.created_slug
         if method == "GET" and url.startswith("/api/recipes/") and url.count("/") == 3:
             return deepcopy(self.recipe)
+        if method == "GET" and url.startswith("/api/households/self/recipes/"):
+            return {"recipeId": self.recipe["id"], "lastMade": self.recipe.get("lastMade")}
         if (
             method in ("POST", "PUT")
             and url.startswith("/api/recipes/")
