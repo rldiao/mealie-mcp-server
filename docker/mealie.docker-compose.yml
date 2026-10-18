@@ -1,20 +1,22 @@
+# A persistent local Mealie for manual testing and the MCP Inspector:
+#   docker compose -f docker/mealie.docker-compose.yml up -d
+# Then open http://localhost:9925 and sign in as changeme@example.com /
+# MyPassword. The automated tests use tests/integration/docker-compose.yml.
+name: mealie-mcp-dev
+
 services:
   mealie:
-    image: ghcr.io/mealie-recipes/mealie:latest # 
-
-
-    container_name: mealie
-    restart: always
+    image: ghcr.io/mealie-recipes/mealie:latest
+    restart: unless-stopped
     ports:
-        - "9925:9000" # 
-
-
+      - "127.0.0.1:9925:9000"
+    environment:
+      BASE_URL: http://localhost:9925
+      ALLOW_SIGNUP: "false"
     deploy:
       resources:
         limits:
-          memory: 1000M # 
-
-
+          memory: 1000M
     volumes:
       - mealie-data:/app/data/
 

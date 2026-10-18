@@ -444,6 +444,14 @@ cp .env.template .env
 # Edit .env with your Mealie instance details
 ```
 
+If you don't have a Mealie to test against, start a local one at
+<http://localhost:9925> (default login `changeme@example.com` / `MyPassword`;
+data persists in a Docker volume):
+
+```bash
+docker compose -f docker/mealie.docker-compose.yml up -d
+```
+
 Launch the MCP Inspector:
 
 ```bash
