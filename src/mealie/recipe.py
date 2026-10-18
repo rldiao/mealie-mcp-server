@@ -402,8 +402,9 @@ class RecipeMixin:
 
         # If no timestamp provided, use current time
         if not timestamp:
-            from datetime import datetime
-            timestamp = datetime.utcnow().isoformat() + "Z"
+            from datetime import UTC, datetime
+
+            timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
         payload = {"timestamp": timestamp}
 

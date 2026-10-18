@@ -4,6 +4,7 @@ patch fields, concise output, image and asset uploads)."""
 import json
 import logging
 import uuid
+from datetime import UTC, datetime, timedelta
 from copy import deepcopy
 
 import pytest
@@ -1315,6 +1316,11 @@ async def test_mark_recipe_last_made_returns_summary(invoke, fetcher):
         "name": "Test",
         "updated_fields": ["lastMade"],
     }
+    timestamp = fetcher.last("PATCH")["json"]["timestamp"]
+    assert timestamp.endswith("Z")
+    parsed = datetime.fromisoformat(timestamp)
+    assert parsed.utcoffset() == timedelta(0)
+    assert abs(datetime.now(UTC) - parsed) < timedelta(minutes=1)
 
 
 async def test_compact_summary_not_returned_on_failure(invoke, fetcher):
