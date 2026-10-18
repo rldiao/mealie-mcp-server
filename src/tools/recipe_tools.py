@@ -282,7 +282,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             recipe_json = mealie.get_recipe(slug)
             if not concise:
                 return recipe_json
-            recipe = Recipe.model_validate(recipe_json)
+            recipe = Recipe.model_validate(
+                {**recipe_json, "lastMade": mealie.get_recipe_last_made(slug)}
+            )
             return recipe.model_dump(
                 include={
                     "name",

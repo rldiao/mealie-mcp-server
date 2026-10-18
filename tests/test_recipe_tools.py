@@ -201,6 +201,18 @@ async def test_update_recipe_sets_nutrition(invoke, fetcher):
     assert body == {"nutrition": {"calories": "450", "fatContent": "12"}}
 
 
+async def test_get_recipe_concise_reads_household_last_made(invoke, fetcher):
+    # Mealie keeps lastMade per household, not on the recipe record.
+    fetcher.responses["GET", "/api/households/self/recipes/test-recipe"] = {
+        "recipeId": fetcher.recipe["id"],
+        "lastMade": "2026-10-18T10:00:00Z",
+    }
+    out = await invoke("get_recipe", slug="test-recipe", concise=True)
+    assert out["lastMade"] == "2026-10-18T10:00:00Z"
+    fetcher.responses["GET", "/api/households/self/recipes/test-recipe"] = {"lastMade": None}
+    assert "lastMade" not in await invoke("get_recipe", slug="test-recipe", concise=True)
+
+
 async def test_get_recipe_concise_includes_orgurl_tags_tools(invoke, fetcher):
     fetcher.recipe = {
         **fetcher.recipe,

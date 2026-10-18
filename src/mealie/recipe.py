@@ -111,6 +111,17 @@ class RecipeMixin:
         logger.info({"message": "Retrieving recipe"})
         return self._handle_request("GET", f"/api/recipes/{slug}")
 
+    def get_recipe_last_made(self, slug: str) -> Optional[str]:
+        """When the current household last made a recipe (None if never).
+
+        Mealie tracks lastMade per household, not on the recipe record.
+        """
+        if not slug:
+            raise ValueError("Recipe slug cannot be empty")
+        logger.info({"message": "Retrieving recipe last made"})
+        summary = self._handle_request("GET", f"/api/households/self/recipes/{slug}")
+        return summary.get("lastMade") if isinstance(summary, dict) else None
+
     def update_recipe(self, slug: str, recipe_data: Dict[str, Any]) -> Dict[str, Any]:
         """Update a specific recipe by its slug
 
