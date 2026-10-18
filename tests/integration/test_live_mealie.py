@@ -5,43 +5,6 @@ import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 
 
-@pytest.fixture
-def recipe(invoke, live_fetcher, unique, cleanup):
-    """Factory for recipes that are deleted after the test."""
-
-    async def make(name="Recipe", **fields):
-        created = await invoke("create_recipe", name=unique(name), **fields)
-        cleanup(lambda: live_fetcher.delete_recipe(created["slug"]))
-        return created
-
-    return make
-
-
-@pytest.fixture
-def organizer(invoke, live_fetcher, unique, cleanup):
-    """Factory for tags, categories, tools, labels, foods, and units."""
-
-    async def make(kind, name):
-        created = await invoke(f"create_{kind}", name=unique(name))
-        delete = getattr(live_fetcher, f"delete_{kind}")
-        cleanup(lambda: delete(created["id"]))
-        return created
-
-    return make
-
-
-@pytest.fixture
-def mealplan_entry(invoke, live_fetcher, cleanup):
-    """Factory for meal plan entries that are deleted after the test."""
-
-    async def make(**fields):
-        entry = await invoke("create_mealplan", **fields)
-        cleanup(lambda: live_fetcher.delete_mealplan(entry["id"]))
-        return entry
-
-    return make
-
-
 async def test_server_is_the_expected_version(live_fetcher):
     about = live_fetcher._handle_request("GET", "/api/app/about")
     assert about["version"].startswith("v3.")
@@ -226,3 +189,81 @@ async def test_ical_feed_enable_rotate_and_disable(
         "feedUrl": None,
     }
     assert httpx.get(second["feedUrl"]).status_code == 404
+
+
+# --- ratings and favorites --------------------------------------------------
+
+
+async def test_rating_and_favorite_round_trip(invoke, recipe):
+    created = await recipe("Rated Pie")
+    stored = await invoke("get_recipe", slug=created["slug"])
+
+    await invoke("rate_recipe", slug=created["slug"], rating=4.5, is_favorite=True)
+    await invoke("rate_recipe", slug=created["slug"], is_favorite=False)
+
+    mine = {r["recipeId"]: r for r in (await invoke("get_my_recipe_ratings"))["ratings"]}
+    assert mine[stored["id"]]["rating"] == 4.5
+    assert mine[stored["id"]]["isFavorite"] is False
+    assert (await invoke("get_recipe", slug=created["slug"]))["rating"] == 4.5
+
+    found = await invoke("get_recipes", query_filter="rating >= 4", per_page=100)
+    assert created["slug"] in [item["slug"] for item in found["items"]]
+
+
+# --- cookbooks --------------------------------------------------------------
+
+
+async def test_cookbook_filters_recipes(invoke, live_fetcher, recipe, unique, cleanup):
+    quick = await recipe("Quick Salad", total_time_seconds=600)
+    slow = await recipe("Slow Roast", total_time_seconds=4 * 3600)
+
+    cookbook = await invoke(
+        "create_cookbook", name=unique("Quick"), query_filter="totalTimeSeconds <= 1800"
+    )
+    cleanup(lambda: live_fetcher.delete_cookbook(cookbook["id"]))
+    assert cookbook["id"] in [c["id"] for c in (await invoke("get_cookbooks"))["items"]]
+
+    listed = await invoke("get_recipes", cookbook=cookbook["slug"], per_page=100)
+    slugs = [item["slug"] for item in listed["items"]]
+    assert quick["slug"] in slugs
+    assert slow["slug"] not in slugs
+
+    updated = await invoke("update_cookbook", cookbook_id=cookbook["id"], public=True)
+    assert updated["public"] is True
+    assert updated["queryFilterString"] == "totalTimeSeconds <= 1800"
+    assert updated["name"] == cookbook["name"]
+
+
+async def test_cookbook_rejects_invalid_filter(invoke, unique):
+    with pytest.raises(ToolError, match="HTTP 422"):
+        await invoke("create_cookbook", name=unique("Bad"), query_filter="nonsense >= 4")
+
+
+# --- meal plan rules and random meals ---------------------------------------
+
+
+async def test_rule_steers_random_meal(invoke, live_fetcher, recipe, unique, cleanup):
+    tag = await invoke("create_tag", name=unique("Rule Tag"))
+    cleanup(lambda: live_fetcher.delete_tag(tag["id"]))
+    target = await recipe("Rule Pick", tags=[{"id": tag["id"], "name": tag["name"]}])
+    await recipe("Not Picked")
+
+    rule = await invoke(
+        "create_mealplan_rule",
+        day="unset",
+        entry_type="dessert",
+        query_filter=f'tags.id IN ["{tag["id"]}"]',
+    )
+    cleanup(lambda: live_fetcher.delete_mealplan_rule(rule["id"]))
+    assert rule["id"] in [r["id"] for r in (await invoke("get_mealplan_rules"))["items"]]
+
+    for _ in range(3):
+        entry = await invoke("create_random_mealplan", date="2030-04-01", entry_type="dessert")
+        cleanup(lambda entry=entry: live_fetcher.delete_mealplan(entry["id"]))
+        assert entry["entryType"] == "dessert"
+        assert entry["recipe"]["slug"] == target["slug"]
+
+    updated = await invoke("update_mealplan_rule", rule_id=rule["id"], day="friday")
+    assert updated["day"] == "friday"
+    assert updated["entryType"] == "dessert"
+    assert updated["queryFilterString"] == rule["queryFilterString"]

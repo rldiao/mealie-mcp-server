@@ -4,7 +4,7 @@ name: mealie-mcp-integration
 
 services:
   mealie:
-    image: ghcr.io/mealie-recipes/mealie:${MEALIE_VERSION:-v3.29.0}
+    image: ghcr.io/mealie-recipes/mealie:${MEALIE_VERSION:-latest}
     ports:
       - "127.0.0.1:${MEALIE_INTEGRATION_PORT:-9926}:9000"
     environment:

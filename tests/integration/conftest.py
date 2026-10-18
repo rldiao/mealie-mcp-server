@@ -112,3 +112,52 @@ def cleanup():
             action()
         except Exception:
             pass
+
+
+@pytest.fixture
+def recipe(invoke, live_fetcher, unique, cleanup):
+    """Factory for recipes that are deleted after the test."""
+
+    async def make(name="Recipe", **fields):
+        created = await invoke("create_recipe", name=unique(name), **fields)
+        cleanup(lambda: live_fetcher.delete_recipe(created["slug"]))
+        return created
+
+    return make
+
+
+@pytest.fixture
+def organizer(invoke, live_fetcher, unique, cleanup):
+    """Factory for tags, categories, tools, labels, foods, and units."""
+
+    async def make(kind, name):
+        created = await invoke(f"create_{kind}", name=unique(name))
+        delete = getattr(live_fetcher, f"delete_{kind}")
+        cleanup(lambda: delete(created["id"]))
+        return created
+
+    return make
+
+
+@pytest.fixture
+def mealplan_entry(invoke, live_fetcher, cleanup):
+    """Factory for meal plan entries that are deleted after the test."""
+
+    async def make(**fields):
+        entry = await invoke("create_mealplan", **fields)
+        cleanup(lambda: live_fetcher.delete_mealplan(entry["id"]))
+        return entry
+
+    return make
+
+
+@pytest.fixture
+def shopping_list(invoke, live_fetcher, unique, cleanup):
+    """Factory for shopping lists that are deleted after the test."""
+
+    async def make(name="List"):
+        created = await invoke("create_shopping_list", name=unique(name))
+        cleanup(lambda: live_fetcher.delete_shopping_list(created["id"]))
+        return created
+
+    return make

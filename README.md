@@ -459,14 +459,15 @@ uv run pytest -q
 
 Integration tests in `tests/integration/` run the MCP tools against a real
 Mealie. They are skipped unless `MEALIE_INTEGRATION=1`. Docker is required: the
-tests start a disposable Mealie (v3.29.0, data in tmpfs, port 9926) and remove
-it afterwards.
+tests start a disposable Mealie (the `latest` image, data in tmpfs, port 9926)
+and remove it afterwards. The Integration workflow runs them nightly against
+`latest`, so a Mealie release that breaks a tool shows up as a failed run.
 
 ```bash
 MEALIE_INTEGRATION=1 uv run pytest -q tests/integration
 ```
 
-Set `MEALIE_VERSION` to test another Mealie image tag, `MEALIE_INTEGRATION_PORT`
+Set `MEALIE_VERSION` to pin a Mealie image tag, `MEALIE_INTEGRATION_PORT`
 to change the port, and `MEALIE_INTEGRATION_KEEP=1` to leave the container
 running. To use an existing instance instead of Docker, set
 `MEALIE_INTEGRATION_URL` and `MEALIE_INTEGRATION_API_KEY`. The tests create
