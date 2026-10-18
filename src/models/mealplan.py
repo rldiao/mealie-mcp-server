@@ -19,7 +19,16 @@ Identifier = Annotated[str, AfterValidator(nonblank)]
 ISODate = Annotated[
     str, Field(pattern=r"^\d{4}-\d{2}-\d{2}$"), AfterValidator(iso_date)
 ]
-EntryType = Literal["breakfast", "lunch", "dinner", "side"]
+EntryType = Literal[
+    "breakfast", "lunch", "dinner", "side", "snack", "drink", "dessert"
+]
+RuleDay = Literal[
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+    "unset",
+]
+RuleEntryType = Literal[
+    "breakfast", "lunch", "dinner", "side", "snack", "drink", "dessert", "unset"
+]
 RecipeScale = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 
 

@@ -200,10 +200,10 @@ See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooti
 
 ## Available Tools
 
-### Recipe Tools (13 operations)
+### Recipe Tools (15 operations)
 
 - `get_recipes` - List/search recipes with advanced filtering, including query
-  filters on time and rating (e.g. `totalTimeSeconds <= 1800`)
+  filters on time and rating (e.g. `totalTimeSeconds <= 1800`) and cookbooks
 - `get_recipe` - Get complete recipe details, or a summary with `concise=true`
 - `create_recipe` - Create a recipe; only the name is required, with optional
   ingredients (including substitutions), instructions, metadata, structured
@@ -213,6 +213,8 @@ See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooti
   display settings; omitted fields are preserved, and empty lists clear content
 - `duplicate_recipe` - Clone a recipe
 - `mark_recipe_last_made` - Update last made timestamp
+- `rate_recipe` - Set your star rating and/or favorite flag on a recipe
+- `get_my_recipe_ratings` - List your ratings and favorites
 - `set_recipe_image_from_url` - Set image from URL
 - `upload_recipe_image_file` - Upload image file
 - `upload_recipe_asset_file` - Upload document/asset
@@ -317,7 +319,7 @@ Use the returned `slug` for later calls, because a rename can change it.
 
 - `parse_ingredients` - Resolve one or more ingredient lines in one request; always returns a list
 
-### Meal Plan Tools (8 operations)
+### Meal Plan Tools (13 operations)
 
 - `get_all_mealplans` - List meal plans
 - `create_mealplan` - Create meal plan entry (optional `recipe_scale`)
@@ -325,13 +327,25 @@ Use the returned `slug` for later calls, because a rename can change it.
 - `update_mealplan` - Update an entry while preserving omitted fields
 - `delete_mealplan` - Delete an entry
 - `get_todays_mealplan` - Get today's meals
+- `create_random_mealplan` - Add an entry with a recipe Mealie picks, following the rules
+- `get_mealplan_rules` - List rules that limit random picks by weekday and meal type
+- `create_mealplan_rule` - Create a rule with a recipe query filter
+- `update_mealplan_rule` - Change a rule, keeping omitted fields
+- `delete_mealplan_rule` - Delete a rule
 - `get_mealplan_ical_feed` - Get the public calendar subscription URL, if enabled
 - `set_mealplan_ical_feed` - Enable (issuing a new URL) or disable the calendar feed
 
-**Total: 84 tools**
+### Cookbook Tools (4 operations)
+
+- `get_cookbooks` - List cookbooks (named, saved recipe filters)
+- `create_cookbook` - Create a cookbook from a recipe query filter
+- `update_cookbook` - Change a cookbook, keeping omitted fields
+- `delete_cookbook` - Delete a cookbook (recipes are not affected)
+
+**Total: 95 tools**
 
 With `MEALIE_ENABLE_AI_IMPORT=true`, `import_recipe_with_ai` adds one optional
-recipe operation: **85 total tools, including 14 recipe tools**. It is absent
+recipe operation: **96 total tools, including 16 recipe tools**. It is absent
 from discovery and cannot be called when disabled.
 
 ### Migrating consolidated tools (breaking change)

@@ -51,6 +51,7 @@ class RecipeMixin:
         require_all_tags: Optional[bool] = None,
         require_all_categories: Optional[bool] = None,
         require_all_tools: Optional[bool] = None,
+        cookbook: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Provides paginated list of recipes
 
@@ -69,6 +70,7 @@ class RecipeMixin:
             require_all_tags: If True, recipe must have ALL specified tags (AND logic). Default False (OR logic)
             require_all_categories: If True, recipe must have ALL specified categories (AND logic)
             require_all_tools: If True, recipe must have ALL specified tools (AND logic)
+            cookbook: Cookbook slug or ID; returns only recipes the cookbook matches
 
         Returns:
             JSON response containing recipe items and pagination information
@@ -88,6 +90,7 @@ class RecipeMixin:
             "tools": tools,
             "requireAllTags": require_all_tags,
             "requireAllCategories": require_all_categories,
+            "cookbook": cookbook,
             "requireAllTools": require_all_tools,
         }
 

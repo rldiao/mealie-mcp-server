@@ -7,7 +7,7 @@ from mcp.server.fastmcp.exceptions import ToolError
 
 from mealie import MealieFetcher
 from mealie.client import MealieApiError
-from models.mealplan import MealPlanEntry
+from models.mealplan import EntryType, MealPlanEntry, RuleDay, RuleEntryType
 from tools.errors import tool_error_boundary
 
 
@@ -45,7 +45,7 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         date: str,
         recipe_id: Optional[str] = None,
         title: Optional[str] = None,
-        entry_type: str = "breakfast",
+        entry_type: EntryType = "breakfast",
         recipe_scale: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Create a new meal plan entry.
@@ -54,7 +54,8 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             date: Date for the mealplan in ISO format (YYYY-MM-DD)
             recipe_id: UUID of the recipe to add to the mealplan (optional)
             title: Title for the mealplan entry if not using a recipe (optional)
-            entry_type: Type of mealplan entry (breakfast, lunch, dinner, side)
+            entry_type: Meal type (breakfast, lunch, dinner, side, snack,
+                drink, or dessert)
             recipe_scale: Serving multiplier for the recipe, e.g. 2 to cook a
                 double batch (optional; Mealie defaults to 1)
 
@@ -84,7 +85,8 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 - date (str): Date in ISO format (YYYY-MM-DD)
                 - recipe_id (str, optional): UUID of the recipe
                 - title (str, optional): Title for the entry
-                - entry_type (str, optional): Type of entry (breakfast, lunch, dinner, side)
+                - entry_type (str, optional): Meal type (breakfast, lunch, dinner,
+                  side, snack, drink, or dessert)
                 - recipe_scale (float, optional): Serving multiplier for the recipe
 
         Returns:
@@ -113,7 +115,7 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         date: Optional[str] = None,
         recipe_id: Optional[str] = None,
         title: Optional[str] = None,
-        entry_type: Optional[str] = None,
+        entry_type: Optional[EntryType] = None,
         recipe_scale: Optional[float] = None,
         clear_recipe: bool = False,
     ) -> Dict[str, Any]:
@@ -155,6 +157,103 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         """
         with tool_error_boundary("Error deleting mealplan entry"):
             return mealie.delete_mealplan(item_id)
+
+    @mcp.tool()
+    def create_random_mealplan(date: str, entry_type: EntryType = "dinner") -> Dict[str, Any]:
+        """Add a meal plan entry with a recipe Mealie picks at random.
+
+        Mealie picks from recipes matching the household's meal plan rules for
+        that weekday and meal type (see get_mealplan_rules), or from all
+        recipes when no rule applies.
+
+        Args:
+            date: Date in ISO format (YYYY-MM-DD).
+            entry_type: Meal type for the entry.
+
+        Returns:
+            Dict[str, Any]: The created entry, including the chosen recipe.
+        """
+        with tool_error_boundary("Error creating random mealplan entry"):
+            return mealie.create_random_mealplan(date, entry_type)
+
+    @mcp.tool()
+    def get_mealplan_rules(
+        page: Optional[int] = None, per_page: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """List the household's meal plan rules.
+
+        A rule limits which recipes create_random_mealplan may pick for a
+        weekday and/or meal type ("unset" matches any).
+
+        Returns:
+            Dict[str, Any]: Rules (under "items") with pagination information.
+        """
+        with tool_error_boundary("Error fetching mealplan rules"):
+            return mealie.get_mealplan_rules(page=page, per_page=per_page)
+
+    @mcp.tool()
+    def create_mealplan_rule(
+        day: RuleDay = "unset",
+        entry_type: RuleEntryType = "unset",
+        query_filter: str = "",
+    ) -> Dict[str, Any]:
+        """Create a rule for which recipes random meal plans may use.
+
+        Args:
+            day: Weekday the rule applies to, or "unset" for every day.
+            entry_type: Meal type it applies to, or "unset" for every meal.
+            query_filter: Mealie query filter for allowed recipes, e.g.
+                "totalTimeSeconds <= 1800" for quick weeknight dinners or
+                'tags.name CONTAINS ALL ["Fish"]'. Empty allows any recipe.
+
+        Returns:
+            Dict[str, Any]: The created rule.
+        """
+        with tool_error_boundary("Error creating mealplan rule"):
+            return mealie.create_mealplan_rule(
+                {"day": day, "entryType": entry_type, "queryFilterString": query_filter}
+            )
+
+    @mcp.tool()
+    def update_mealplan_rule(
+        rule_id: str,
+        day: Optional[RuleDay] = None,
+        entry_type: Optional[RuleEntryType] = None,
+        query_filter: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Change some fields of a meal plan rule; omitted fields are kept.
+
+        Args:
+            rule_id: ID of the rule.
+            day: Weekday, or "unset" for every day.
+            entry_type: Meal type, or "unset" for every meal.
+            query_filter: Recipe filter; "" allows any recipe.
+
+        Returns:
+            Dict[str, Any]: The updated rule.
+        """
+        with tool_error_boundary("Error updating mealplan rule"):
+            changes = {
+                "day": day,
+                "entryType": entry_type,
+                "queryFilterString": query_filter,
+            }
+            return mealie.update_mealplan_rule(
+                rule_id, {k: v for k, v in changes.items() if v is not None}
+            )
+
+    @mcp.tool()
+    def delete_mealplan_rule(rule_id: str) -> Dict[str, Any]:
+        """Delete a meal plan rule.
+
+        Args:
+            rule_id: ID of the rule.
+
+        Returns:
+            Dict[str, Any]: Confirmation of deletion.
+        """
+        with tool_error_boundary("Error deleting mealplan rule"):
+            return mealie.delete_mealplan_rule(rule_id)
 
     @mcp.tool()
     def get_mealplan_ical_feed() -> Dict[str, Any]:

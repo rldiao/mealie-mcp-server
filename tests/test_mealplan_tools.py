@@ -71,7 +71,7 @@ async def test_invalid_mealplan_filters_do_not_request(invoke, fetcher, dates):
     [
         {"date": "2026-02-30"},
         {"date": "20261001"},
-        {"entry_type": "snack"},
+        {"entry_type": "brunch"},
         {"recipe_id": "   "},
         {"title": "  ", "recipe_id": None},
         {"title": None, "recipe_id": None},
@@ -245,7 +245,7 @@ async def test_mealplan_update_preserves_fields_and_distinguishes_clear(
         {},
         {"clear_recipe": True, "recipe_id": "replacement"},
         {"date": "2026-02-30"},
-        {"entry_type": "snack"},
+        {"entry_type": "brunch"},
         {"recipe_scale": 0},
     ],
 )
@@ -282,7 +282,7 @@ async def test_typed_mealplan_bulk_tool_schema_preserves_envelope(server):
         meal["properties"]
     )
     assert meal["properties"]["entry_type"]["default"] == "breakfast"
-    assert meal["properties"]["entry_type"]["enum"] == ["breakfast", "lunch", "dinner", "side"]
+    assert meal["properties"]["entry_type"]["enum"] == ["breakfast", "lunch", "dinner", "side", "snack", "drink", "dessert"]
 
 
 async def test_mealplan_logs_exclude_content_and_identifiers(invoke, fetcher, caplog):

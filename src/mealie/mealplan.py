@@ -1,13 +1,23 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from models.mealplan import MealPlanDateRange, MealPlanEntry, MealPlanUpdate
+from pydantic import TypeAdapter
+
+from models.mealplan import (
+    EntryType,
+    ISODate,
+    MealPlanDateRange,
+    MealPlanEntry,
+    MealPlanUpdate,
+)
 from utils import format_api_params
 
 logger = logging.getLogger("mealie-mcp")
 
 
 MEALPLAN_ICAL = "/api/households/mealplans/ical"
+MEALPLAN_RULES = "/api/households/mealplans/rules"
+RULE_FIELDS = ("day", "entryType", "queryFilterString")
 
 
 class MealplanMixin:
@@ -19,6 +29,53 @@ class MealplanMixin:
             "enabled": bool(token),
             "feedUrl": f"{self.base_url}{MEALPLAN_ICAL}/{token}" if token else None,
         }
+
+    def create_random_mealplan(self, date: str, entry_type: str = "dinner") -> Dict[str, Any]:
+        """Let Mealie pick a recipe for a date, honouring the household's rules.
+
+        Returns:
+            The created meal plan entry, including the chosen recipe
+        """
+        payload = {
+            "date": TypeAdapter(ISODate).validate_python(date),
+            "entryType": TypeAdapter(EntryType).validate_python(entry_type),
+        }
+        logger.info({"message": "Creating random mealplan entry"})
+        return self._handle_request(
+            "POST", "/api/households/mealplans/random", json=payload
+        )
+
+    def get_mealplan_rules(
+        self, page: Optional[int] = None, per_page: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """List the household's meal plan rules."""
+        params = format_api_params({"page": page, "perPage": per_page})
+        logger.info({"message": "Retrieving mealplan rules"})
+        return self._handle_request("GET", MEALPLAN_RULES, params=params)
+
+    def create_mealplan_rule(self, rule: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a rule from Mealie-cased fields (day, entryType, queryFilterString)."""
+        logger.info({"message": "Creating mealplan rule"})
+        return self._handle_request("POST", MEALPLAN_RULES, json=rule)
+
+    def update_mealplan_rule(self, rule_id: str, changes: Dict[str, Any]) -> Dict[str, Any]:
+        """Change some fields of a rule, keeping the rest."""
+        if not rule_id or not rule_id.strip():
+            raise ValueError("Rule ID cannot be empty")
+        if not changes:
+            raise ValueError("At least one field must be provided to update")
+        current = self._handle_request("GET", f"{MEALPLAN_RULES}/{rule_id}")
+        merged = {key: current.get(key) for key in RULE_FIELDS if key in current}
+        merged.update(changes)
+        logger.info({"message": "Updating mealplan rule"})
+        return self._handle_request("PUT", f"{MEALPLAN_RULES}/{rule_id}", json=merged)
+
+    def delete_mealplan_rule(self, rule_id: str) -> Dict[str, Any]:
+        """Delete a meal plan rule."""
+        if not rule_id or not rule_id.strip():
+            raise ValueError("Rule ID cannot be empty")
+        logger.info({"message": "Deleting mealplan rule"})
+        return self._handle_request("DELETE", f"{MEALPLAN_RULES}/{rule_id}")
 
     def get_mealplan_ical_feed(self) -> Dict[str, Any]:
         """Get the household's meal plan iCal subscription URL, if enabled.
@@ -93,7 +150,7 @@ class MealplanMixin:
             date: Date for the mealplan in ISO format (YYYY-MM-DD)
             recipe_id: UUID of the recipe to add to the mealplan (optional)
             title: Title for the mealplan entry if not using a recipe (optional)
-            entry_type: Type of mealplan entry (breakfast, lunch, dinner, etc.)
+            entry_type: Meal type (breakfast, lunch, dinner, side, snack, drink, dessert)
             recipe_scale: Serving multiplier for the recipe (Mealie defaults to 1)
 
         Returns:

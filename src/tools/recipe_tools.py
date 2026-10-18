@@ -4,9 +4,10 @@ import re
 import uuid
 from contextlib import contextmanager
 from copy import deepcopy
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 from mcp.server.fastmcp.exceptions import ToolError
 
 from mealie import MealieFetcher
@@ -322,6 +323,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         query_filter: Optional[str] = None,
         order_by: Optional[str] = None,
         order_direction: Literal["asc", "desc"] = "desc",
+        cookbook: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Provides a paginated list of recipes with optional filtering.
 
@@ -347,6 +349,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             order_by: Field to sort by, e.g. "totalTimeSeconds", "rating",
                 "createdAt", or "lastMade".
             order_direction: "asc" or "desc".
+            cookbook: Cookbook slug or ID; returns only the recipes that
+                cookbook's filter matches (see get_cookbooks).
 
         Returns:
             Dict[str, Any]: Recipe summaries with details like ID, name, description, and image information.
@@ -363,6 +367,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 query_filter=query_filter,
                 order_by=order_by,
                 order_direction=order_direction,
+                cookbook=cookbook,
             )
 
     @mcp.tool()
@@ -694,6 +699,40 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             if return_recipe:
                 return result
             return _update_summary(slug, result, ["lastMade"])
+
+    @mcp.tool()
+    def rate_recipe(
+        slug: str,
+        rating: Optional[Annotated[float, Field(ge=0, le=5)]] = None,
+        is_favorite: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """Set your star rating and/or favorite flag on a recipe.
+
+        Ratings belong to the API key's user; the recipe's rating field is the
+        household-wide average. Leave an argument out to keep its current value.
+
+        Args:
+            slug: The unique text identifier for the recipe.
+            rating: Stars from 0 to 5; half stars such as 4.5 are allowed.
+            is_favorite: True to add to favorites, False to remove.
+
+        Returns:
+            Dict[str, Any]: {success, slug} plus the rating and isFavorite set.
+        """
+        with tool_error_boundary("Error rating recipe"):
+            return mealie.rate_recipe(slug, rating=rating, is_favorite=is_favorite)
+
+    @mcp.tool()
+    def get_my_recipe_ratings() -> Dict[str, Any]:
+        """List your recipe ratings and favorites.
+
+        Returns:
+            Dict[str, Any]: {"ratings": [{recipeId, rating, isFavorite}, ...]}.
+            Use get_recipes with query_filter 'id IN [...]' or get_recipe to
+            resolve recipe names.
+        """
+        with tool_error_boundary("Error fetching recipe ratings"):
+            return mealie.get_my_ratings()
 
     @mcp.tool()
     def set_recipe_image_from_url(slug: str, image_url: str) -> Dict[str, Any]:
