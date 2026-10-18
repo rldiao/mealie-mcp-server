@@ -4,7 +4,7 @@ import re
 import uuid
 from contextlib import contextmanager
 from copy import deepcopy
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
@@ -132,6 +132,18 @@ def _require_text(value: str, label: str) -> None:
         raise ValueError(f"{label} cannot be empty")
 
 
+MAX_DURATION_SECONDS = 2**31 - 1
+
+
+def _require_duration(value: Any, label: str) -> None:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or not 0 <= value <= MAX_DURATION_SECONDS
+    ):
+        raise ValueError(f"{label} must be a whole number of seconds from 0")
+
+
 def _recipe_changes(
     *,
     ingredients: Optional[List[Union[str, RecipeIngredientInput]]] = None,
@@ -152,6 +164,9 @@ def _recipe_changes(
         "prep_time": "prepTime",
         "cook_time": "cookTime",
         "perform_time": "performTime",
+        "total_time_seconds": "totalTimeSeconds",
+        "prep_time_seconds": "prepTimeSeconds",
+        "perform_time_seconds": "performTimeSeconds",
         "recipe_yield": "recipeYield",
         "servings": "recipeServings",
     }
@@ -162,6 +177,9 @@ def _recipe_changes(
         _require_text(changes["name"], "Recipe name")
     if "recipeServings" in changes and not math.isfinite(changes["recipeServings"]):
         raise ValueError("Servings must be finite")
+    for key in ("totalTimeSeconds", "prepTimeSeconds", "performTimeSeconds"):
+        if key in changes:
+            _require_duration(changes[key], key)
     built_ingredients = [_build_ingredient(i) for i in ingredients or []]
     built_instructions = [_build_instruction(i) for i in instructions or []]
     _normalize_references(built_ingredients, built_instructions)
@@ -298,6 +316,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         tags: Optional[List[str]] = None,
         require_all_tags: Optional[bool] = None,
         require_all_categories: Optional[bool] = None,
+        query_filter: Optional[str] = None,
+        order_by: Optional[str] = None,
+        order_direction: Literal["asc", "desc"] = "desc",
     ) -> Dict[str, Any]:
         """Provides a paginated list of recipes with optional filtering.
 
@@ -315,6 +336,14 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             tags: Filter by tag SLUGS or UUIDs (e.g., ["quick", "healthy"]).
             require_all_tags: If True, recipe must have ALL specified tags (AND). Default False (OR).
             require_all_categories: If True, recipe must have ALL specified categories (AND).
+            query_filter: Mealie query filter on recipe fields, e.g.
+                "totalTimeSeconds <= 1800" for recipes ready within 30 minutes,
+                "rating >= 4", or both joined with AND. Time fields are
+                totalTimeSeconds, prepTimeSeconds, and performTimeSeconds
+                (Mealie 3.29+); recipes without a structured time never match.
+            order_by: Field to sort by, e.g. "totalTimeSeconds", "rating",
+                "createdAt", or "lastMade".
+            order_direction: "asc" or "desc".
 
         Returns:
             Dict[str, Any]: Recipe summaries with details like ID, name, description, and image information.
@@ -328,6 +357,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 tags=tags,
                 require_all_tags=require_all_tags,
                 require_all_categories=require_all_categories,
+                query_filter=query_filter,
+                order_by=order_by,
+                order_direction=order_direction,
             )
 
     @mcp.tool()
@@ -356,6 +388,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                     "recipeYieldQuantity",
                     "recipeYield",
                     "totalTime",
+                    "totalTimeSeconds",
                     "rating",
                     "orgURL",
                     "tags",
@@ -412,6 +445,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         prep_time: Optional[str] = None,
         cook_time: Optional[str] = None,
         perform_time: Optional[str] = None,
+        total_time_seconds: Optional[int] = None,
+        prep_time_seconds: Optional[int] = None,
+        perform_time_seconds: Optional[int] = None,
         recipe_yield: Optional[str] = None,
         servings: Optional[float] = None,
         image_url: Optional[str] = None,
@@ -453,6 +489,11 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             prep_time: Preparation time, same format as total_time.
             cook_time: Cooking time, same format as total_time.
             perform_time: Hands-on/active time, same format as total_time.
+            total_time_seconds: Structured total time in seconds (Mealie 3.29+),
+                used by time filters such as "totalTimeSeconds <= 1800". Set it
+                alongside total_time; Mealie shows the free text when present.
+            prep_time_seconds: Structured preparation time in seconds.
+            perform_time_seconds: Structured hands-on time in seconds.
             recipe_yield: Yield as free text, e.g. "4 Portionen".
             servings: Number of servings (numeric).
             image_url: URL of an image to scrape and set as the recipe image.
@@ -484,6 +525,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 prep_time=prep_time,
                 cook_time=cook_time,
                 perform_time=perform_time,
+                total_time_seconds=total_time_seconds,
+                prep_time_seconds=prep_time_seconds,
+                perform_time_seconds=perform_time_seconds,
                 recipe_yield=recipe_yield,
                 servings=servings,
                 ingredients=ingredients,
@@ -507,6 +551,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         prep_time: Optional[str] = None,
         cook_time: Optional[str] = None,
         perform_time: Optional[str] = None,
+        total_time_seconds: Optional[int] = None,
+        prep_time_seconds: Optional[int] = None,
+        perform_time_seconds: Optional[int] = None,
         org_url: Optional[str] = None,
         tags: Optional[List[OrganizerRef]] = None,
         tools: Optional[List[OrganizerRef]] = None,
@@ -534,6 +581,11 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             prep_time: Preparation time, same format as total_time.
             cook_time: Cooking time, same format as total_time.
             perform_time: Hands-on/active time, same format as total_time.
+            total_time_seconds: Structured total time in seconds (Mealie 3.29+),
+                used by time filters such as "totalTimeSeconds <= 1800". Set it
+                alongside total_time; Mealie shows the free text when present.
+            prep_time_seconds: Structured preparation time in seconds.
+            perform_time_seconds: Structured hands-on time in seconds.
             org_url: Source URL for the recipe (shown as a link in the Mealie UI).
             tags: Existing Mealie tags (id+name) to set; look up with get_tags.
             tools: Existing Mealie tools (id+name) to set; look up with get_tools.
@@ -577,6 +629,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 prep_time=prep_time,
                 cook_time=cook_time,
                 perform_time=perform_time,
+                total_time_seconds=total_time_seconds,
+                prep_time_seconds=prep_time_seconds,
+                perform_time_seconds=perform_time_seconds,
                 org_url=org_url,
                 tags=tags,
                 tools=tools,

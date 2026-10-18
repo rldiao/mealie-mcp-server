@@ -23,7 +23,8 @@ async def test_recipe_creation_tool_schema_is_consolidated(server):
     assert schema["required"] == ["name"]
     assert set(schema["properties"]) == {
         "name", "description", "org_url", "total_time", "prep_time", "cook_time",
-        "perform_time", "recipe_yield", "servings", "image_url", "ingredients",
+        "perform_time", "total_time_seconds", "prep_time_seconds",
+        "perform_time_seconds", "recipe_yield", "servings", "image_url", "ingredients",
         "instructions", "tags", "tools", "notes", "nutrition", "settings",
     }
 
@@ -167,6 +168,78 @@ async def test_update_recipe_maps_all_fields(invoke, fetcher):
         "tags": [{"id": "t1", "name": "Quick", "slug": "quick"}],
         "tools": [{"id": "k1", "name": "Pfanne", "slug": "pfanne"}],
     }
+
+
+async def test_create_recipe_sets_structured_times(invoke, fetcher):
+    await invoke(
+        "create_recipe",
+        name="Timed",
+        total_time="25 min",
+        total_time_seconds=1500,
+        prep_time_seconds=600,
+        perform_time_seconds=900,
+    )
+    body = fetcher.last("PUT", "/api/recipes/")["json"]
+    assert body["totalTime"] == "25 min"
+    assert body["totalTimeSeconds"] == 1500
+    assert body["prepTimeSeconds"] == 600
+    assert body["performTimeSeconds"] == 900
+
+
+async def test_update_recipe_patches_structured_times(invoke, fetcher):
+    result = await invoke(
+        "update_recipe", slug="test-recipe", total_time_seconds=0, prep_time_seconds=300
+    )
+    body = fetcher.last("PATCH", "/api/recipes/")["json"]
+    assert body == {"totalTimeSeconds": 0, "prepTimeSeconds": 300}
+    assert result["updated_fields"] == ["totalTimeSeconds", "prepTimeSeconds"]
+
+
+@pytest.mark.parametrize("seconds", [-1, 2**31, 1.5])
+async def test_structured_times_reject_invalid_values(invoke, fetcher, seconds):
+    with pytest.raises(ToolError):
+        await invoke("update_recipe", slug="test-recipe", total_time_seconds=seconds)
+    assert fetcher.requests == []
+
+
+async def test_structured_time_write_failure_is_reported(invoke, fetcher):
+    fetcher.fail_on("/api/recipes/test-recipe")
+    with pytest.raises(ToolError, match="Error updating recipe"):
+        await invoke("update_recipe", slug="test-recipe", total_time_seconds=60)
+
+
+async def test_get_recipe_concise_includes_structured_total_time(invoke, fetcher):
+    fetcher.recipe = {**fetcher.recipe, "totalTimeSeconds": 1800, "prepTimeSeconds": 60}
+    out = await invoke("get_recipe", slug="test-recipe", concise=True)
+    assert out["totalTimeSeconds"] == 1800
+    assert "prepTimeSeconds" not in out
+
+
+async def test_get_recipes_passes_query_filter_and_order(invoke, fetcher):
+    await invoke(
+        "get_recipes",
+        query_filter="totalTimeSeconds <= 1800 AND rating >= 4",
+        order_by="totalTimeSeconds",
+        order_direction="asc",
+    )
+    params = fetcher.last("GET", "/api/recipes")["params"]
+    assert params["queryFilter"] == "totalTimeSeconds <= 1800 AND rating >= 4"
+    assert params["orderBy"] == "totalTimeSeconds"
+    assert params["orderDirection"] == "asc"
+
+
+async def test_get_recipes_omits_unset_filters(invoke, fetcher):
+    await invoke("get_recipes")
+    params = fetcher.last("GET", "/api/recipes")["params"]
+    assert "queryFilter" not in params
+    assert "orderBy" not in params
+    assert params["orderDirection"] == "desc"
+
+
+async def test_get_recipes_rejects_unknown_order_direction(invoke, fetcher):
+    with pytest.raises(ToolError):
+        await invoke("get_recipes", order_direction="sideways")
+    assert fetcher.requests == []
 
 
 async def test_create_recipe_sets_nutrition(invoke, fetcher):
