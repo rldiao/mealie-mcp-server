@@ -2,7 +2,7 @@
 
 Mealie tracks tool ownership per household via the ``householdsWithTool``
 list on a tool record. The fake fetcher's GET /api/users/self returns
-householdId "household-1".
+householdId "family".
 """
 
 import pytest
@@ -24,7 +24,7 @@ def _tool(households):
 
 
 async def test_set_tool_on_hand_marks_on(invoke, fetcher):
-    fetcher.responses["GET", f"{TOOL_URL}/t1"] = _tool(["household-2"])
+    fetcher.responses["GET", f"{TOOL_URL}/t1"] = _tool(["other-household"])
 
     await invoke("set_tool_on_hand", tool_id="t1")
 
@@ -32,25 +32,25 @@ async def test_set_tool_on_hand_marks_on(invoke, fetcher):
     assert req["json"]["id"] == "t1"
     assert req["json"]["name"] == "Dutch Oven"
     assert req["json"]["slug"] == "dutch-oven"
-    assert req["json"]["householdsWithTool"] == ["household-2", "household-1"]
+    assert req["json"]["householdsWithTool"] == ["other-household", "family"]
 
 
 async def test_set_tool_on_hand_unmarks_only_current_household(invoke, fetcher):
-    fetcher.responses["GET", f"{TOOL_URL}/t1"] = _tool(["household-1", "household-2"])
+    fetcher.responses["GET", f"{TOOL_URL}/t1"] = _tool(["family", "other-household"])
 
     await invoke("set_tool_on_hand", tool_id="t1", on_hand=False)
 
     req = fetcher.last("PUT", f"{TOOL_URL}/t1")
-    assert req["json"]["householdsWithTool"] == ["household-2"]
+    assert req["json"]["householdsWithTool"] == ["other-household"]
 
 
 async def test_set_tool_on_hand_is_idempotent(invoke, fetcher):
-    fetcher.responses["GET", f"{TOOL_URL}/t1"] = _tool(["household-1"])
+    fetcher.responses["GET", f"{TOOL_URL}/t1"] = _tool(["family"])
 
     await invoke("set_tool_on_hand", tool_id="t1", on_hand=True)
 
     req = fetcher.last("PUT", f"{TOOL_URL}/t1")
-    assert req["json"]["householdsWithTool"] == ["household-1"]
+    assert req["json"]["householdsWithTool"] == ["family"]
 
 
 async def test_set_tool_on_hand_validates_tool_id(invoke, fetcher):
@@ -86,7 +86,7 @@ async def test_mark_tools_on_hand_matches_existing_tool(invoke, fetcher):
     assert fetcher.last("GET", TOOL_URL)["params"]["search"] == "dutch oven"
     assert fetcher.last("POST", TOOL_URL) is None
     req = fetcher.last("PUT", f"{TOOL_URL}/t1")
-    assert req["json"]["householdsWithTool"] == ["household-1"]
+    assert req["json"]["householdsWithTool"] == ["family"]
     assert result["created"] == []
     assert len(result["updated"]) == 1
 
@@ -96,12 +96,12 @@ async def test_mark_tools_on_hand_creates_missing_tool(invoke, fetcher):
 
     assert fetcher.last("POST", TOOL_URL)["json"] == {"name": "Stand Mixer"}
     put = fetcher.last("PUT", f"{TOOL_URL}/generated-0001")
-    assert put["json"]["householdsWithTool"] == ["household-1"]
+    assert put["json"]["householdsWithTool"] == ["family"]
     assert result["created"] == ["Stand Mixer"]
 
 
 async def test_mark_tools_on_hand_clears_household(invoke, fetcher):
-    fetcher.responses["GET", TOOL_URL] = {"items": [_tool(["household-1"])]}
+    fetcher.responses["GET", TOOL_URL] = {"items": [_tool(["family"])]}
 
     await invoke("mark_tools_on_hand", names=["Dutch Oven"], on_hand=False)
 

@@ -2,7 +2,7 @@
 
 Mealie tracks on-hand status per household via the
 ``householdsWithIngredientFood`` list on a food record. The fake fetcher's
-GET /api/users/self returns householdId "household-1".
+GET /api/users/self returns householdId "family".
 """
 
 import pytest
@@ -19,12 +19,12 @@ async def test_set_food_on_hand_marks_on(invoke, fetcher):
     req = fetcher.last("PUT", "/api/foods/f1")
     assert req["json"]["id"] == "f1"
     assert req["json"]["name"] == "Salt"
-    assert req["json"]["householdsWithIngredientFood"] == ["household-1"]
+    assert req["json"]["householdsWithIngredientFood"] == ["family"]
 
 
 async def test_set_food_on_hand_unmarks(invoke, fetcher):
     fetcher.foods = [
-        {"id": "f1", "name": "Salt", "householdsWithIngredientFood": ["household-1"]}
+        {"id": "f1", "name": "Salt", "householdsWithIngredientFood": ["family"]}
     ]
 
     await invoke("set_food_on_hand", food_id="f1", on_hand=False)
@@ -35,13 +35,13 @@ async def test_set_food_on_hand_unmarks(invoke, fetcher):
 
 async def test_set_food_on_hand_is_idempotent(invoke, fetcher):
     fetcher.foods = [
-        {"id": "f1", "name": "Salt", "householdsWithIngredientFood": ["household-1"]}
+        {"id": "f1", "name": "Salt", "householdsWithIngredientFood": ["family"]}
     ]
 
     await invoke("set_food_on_hand", food_id="f1", on_hand=True)
 
     req = fetcher.last("PUT", "/api/foods/f1")
-    assert req["json"]["householdsWithIngredientFood"] == ["household-1"]
+    assert req["json"]["householdsWithIngredientFood"] == ["family"]
 
 
 async def test_set_food_on_hand_validates_food_id(invoke, fetcher):
@@ -59,7 +59,7 @@ async def test_mark_foods_on_hand_matches_existing_food(invoke, fetcher):
 
     assert fetcher.last("POST", "/api/foods") is None
     req = fetcher.last("PUT", "/api/foods/f1")
-    assert req["json"]["householdsWithIngredientFood"] == ["household-1"]
+    assert req["json"]["householdsWithIngredientFood"] == ["family"]
     assert result["created"] == []
 
 
@@ -71,13 +71,13 @@ async def test_mark_foods_on_hand_creates_missing_food(invoke, fetcher):
 
     created_id = fetcher.foods[0]["id"]
     put_call = fetcher.last("PUT", f"/api/foods/{created_id}")
-    assert put_call["json"]["householdsWithIngredientFood"] == ["household-1"]
+    assert put_call["json"]["householdsWithIngredientFood"] == ["family"]
     assert result["created"] == ["Flour"]
 
 
 async def test_mark_foods_on_hand_clears_household(invoke, fetcher):
     fetcher.foods = [
-        {"id": "f1", "name": "Salt", "householdsWithIngredientFood": ["household-1"]}
+        {"id": "f1", "name": "Salt", "householdsWithIngredientFood": ["family"]}
     ]
 
     await invoke("mark_foods_on_hand", names=["Salt"], on_hand=False)

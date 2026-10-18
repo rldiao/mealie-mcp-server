@@ -3,6 +3,8 @@ from typing import Any, Dict, List, Optional
 
 from utils import format_api_params
 
+from .updates import merge_replacement_record
+
 logger = logging.getLogger("mealie-mcp")
 
 
@@ -94,9 +96,12 @@ class LabelsMixin:
         if not label_data:
             raise ValueError("Label data cannot be empty")
 
+        # Mealie's PUT replaces the label and requires its id and groupId.
+        merged = merge_replacement_record(self.get_label(label_id), label_data)
+
         logger.info({"message": "Updating label"})
         return self._handle_request(
-            "PUT", f"/api/groups/labels/{label_id}", json=label_data
+            "PUT", f"/api/groups/labels/{label_id}", json=merged
         )
 
     def delete_label(self, label_id: str) -> Dict[str, Any]:

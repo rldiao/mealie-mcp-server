@@ -20,8 +20,8 @@ class ToolsMixin:
     ) -> Dict[str, Any]:
         """List the household's recipe tools (optionally filtered by search term).
 
-        Each tool includes ``householdsWithTool``, a list of household IDs.
-        Ownership requires membership of the relevant household ID in that list.
+        Each tool includes ``householdsWithTool``, a list of household slugs.
+        Ownership requires membership of the relevant household slug in that list.
 
         Args:
             search: Search term to filter tools by name
@@ -149,7 +149,7 @@ class ToolsMixin:
 
         Mealie tracks ownership per household via the ``householdsWithTool``
         list on the tool record rather than a single global boolean, so this
-        fetches the current household id, then fetch-merges the tool
+        fetches the current household slug, then fetch-merges the tool
         (Mealie's PUT replaces the whole record).
 
         Args:
@@ -163,10 +163,10 @@ class ToolsMixin:
             raise ValueError("Tool ID cannot be empty")
 
         existing = self.get_tool(tool_id)
-        household_id = self._current_household_id()
+        household_slug = self._current_household_slug()
 
         logger.info({"message": "Setting tool on-hand status"})
-        return self._put_tool_households(existing, household_id, on_hand)
+        return self._put_tool_households(existing, household_slug, on_hand)
 
     def set_tools_on_hand_by_name(
         self, names: List[str], on_hand: bool = True
@@ -189,7 +189,7 @@ class ToolsMixin:
 
         logger.info({"message": "Marking tools on-hand"})
 
-        household_id = self._current_household_id()
+        household_slug = self._current_household_slug()
         updated = []
         created = []
 
@@ -207,22 +207,16 @@ class ToolsMixin:
                 tool = self.create_tool(name)
                 created.append(name)
 
-            updated.append(self._put_tool_households(tool, household_id, on_hand))
+            updated.append(self._put_tool_households(tool, household_slug, on_hand))
 
         return {"updated": updated, "created": created}
 
-    def _current_household_id(self) -> str:
-        household_id = self.get_current_user().get("householdId")
-        if not household_id:
-            raise ValueError("Could not determine the current household")
-        return household_id
-
     def _put_tool_households(
-        self, tool: Dict[str, Any], household_id: str, on_hand: bool
+        self, tool: Dict[str, Any], household_slug: str, on_hand: bool
     ) -> Dict[str, Any]:
-        households = [h for h in tool.get("householdsWithTool") or [] if h != household_id]
+        households = [h for h in tool.get("householdsWithTool") or [] if h != household_slug]
         if on_hand:
-            households.append(household_id)
+            households.append(household_slug)
 
         merged = {**tool, "householdsWithTool": households}
         return self._handle_request(

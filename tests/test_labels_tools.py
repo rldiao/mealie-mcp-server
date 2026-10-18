@@ -50,8 +50,14 @@ async def test_update_label_merges_provided_fields(invoke, fetcher):
 
     await invoke("update_label", label_id="l1", color="#8BC34A")
 
+    # Mealie's PUT replaces the label and requires id and groupId, so the
+    # current record is fetched and the change merged over it.
+    assert [(r["method"], r["url"]) for r in fetcher.requests] == [
+        ("GET", "/api/groups/labels/l1"),
+        ("PUT", "/api/groups/labels/l1"),
+    ]
     req = fetcher.last("PUT", "/api/groups/labels/l1")
-    assert req["json"] == {"color": "#8BC34A"}
+    assert req["json"] == {"id": "l1", "name": "Produce", "color": "#8BC34A"}
 
 
 async def test_update_label_requires_a_field(invoke, fetcher):

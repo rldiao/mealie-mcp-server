@@ -147,7 +147,7 @@ class FoodsMixin:
 
         Mealie tracks on-hand status per household via the
         ``householdsWithIngredientFood`` list on the food record rather than
-        a single global boolean, so this fetches the current household id,
+        a single global boolean, so this fetches the current household slug,
         then fetch-merges the food (Mealie's PUT replaces the whole record).
 
         Args:
@@ -161,14 +161,14 @@ class FoodsMixin:
             raise ValueError("Food ID cannot be empty")
 
         existing = self.get_food(food_id)
-        household_id = self.get_current_user().get("householdId")
+        household_slug = self._current_household_slug()
         households = list(existing.get("householdsWithIngredientFood", []))
 
         if on_hand:
-            if household_id not in households:
-                households.append(household_id)
+            if household_slug not in households:
+                households.append(household_slug)
         else:
-            households = [h for h in households if h != household_id]
+            households = [h for h in households if h != household_slug]
 
         merged = {**existing, "householdsWithIngredientFood": households}
 
@@ -197,7 +197,7 @@ class FoodsMixin:
 
         logger.info({"message": "Marking foods on-hand"})
 
-        household_id = self.get_current_user().get("householdId")
+        household_slug = self._current_household_slug()
         updated = []
         created = []
 
@@ -217,10 +217,10 @@ class FoodsMixin:
 
             households = list(food.get("householdsWithIngredientFood", []))
             if on_hand:
-                if household_id not in households:
-                    households.append(household_id)
+                if household_slug not in households:
+                    households.append(household_slug)
             else:
-                households = [h for h in households if h != household_id]
+                households = [h for h in households if h != household_slug]
 
             merged = {**food, "householdsWithIngredientFood": households}
             updated.append(

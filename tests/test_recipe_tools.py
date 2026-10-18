@@ -216,6 +216,18 @@ async def test_get_recipe_concise_includes_structured_total_time(invoke, fetcher
     assert "prepTimeSeconds" not in out
 
 
+async def test_get_recipe_concise_reads_household_last_made(invoke, fetcher):
+    # Mealie keeps lastMade per household, not on the recipe record.
+    fetcher.responses["GET", "/api/households/self/recipes/test-recipe"] = {
+        "recipeId": fetcher.recipe["id"],
+        "lastMade": "2026-10-18T10:00:00Z",
+    }
+    out = await invoke("get_recipe", slug="test-recipe", concise=True)
+    assert out["lastMade"] == "2026-10-18T10:00:00Z"
+    fetcher.responses["GET", "/api/households/self/recipes/test-recipe"] = {"lastMade": None}
+    assert "lastMade" not in await invoke("get_recipe", slug="test-recipe", concise=True)
+
+
 async def test_get_recipes_passes_query_filter_and_order(invoke, fetcher):
     await invoke(
         "get_recipes",

@@ -19,8 +19,8 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
         Use this to resolve a tool id+name before assigning it to a recipe via
         create_recipe or update_recipe. Each item includes
-        ``householdsWithTool``, a list of household IDs. A household owns the
-        tool only if its ID appears in that list; a non-empty list alone does
+        ``householdsWithTool``, a list of household slugs. A household owns the
+        tool only if its slug appears in that list; a non-empty list alone does
         not establish ownership by the current household.
 
         Args:

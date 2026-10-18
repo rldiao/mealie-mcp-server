@@ -388,7 +388,7 @@ async def test_equipment_read_requires_slug(invoke, fetcher):
                 "extras": {"keep": "value"},
                 "pluralName": "Existing foods",
                 "aliases": [{"name": "Alias"}],
-                "householdsWithIngredientFood": ["household-1"],
+                "householdsWithIngredientFood": ["family"],
             },
             {"description": "new"},
             {"description": "new"},
@@ -399,7 +399,7 @@ async def test_equipment_read_requires_slug(invoke, fetcher):
                 "labelId": "label-1",
                 "extras": {"old": "value"},
                 "aliases": [{"name": "Alias"}],
-                "householdsWithIngredientFood": ["household-1"],
+                "householdsWithIngredientFood": ["family"],
             },
             {"label_id": "", "extras": {}},
             {"labelId": None, "extras": {}},
@@ -418,7 +418,7 @@ async def test_equipment_read_requires_slug(invoke, fetcher):
         ),
         (
             "tool",
-            {"slug": "existing", "householdsWithTool": ["household-1"]},
+            {"slug": "existing", "householdsWithTool": ["family"]},
             {"name": "Renamed"},
             {"name": "Renamed"},
         ),
@@ -511,4 +511,4 @@ async def test_lookup_descriptions_match_resource_contracts(server):
     tools = {tool.name: tool for tool in await mcp.list_tools()}
     assert "associated recipes" not in tools["get_category"].description
     assert "ID, slug, and name" in tools["get_category"].description
-    assert "only if its ID appears" in tools["get_tools"].description
+    assert "only if its slug appears" in tools["get_tools"].description
