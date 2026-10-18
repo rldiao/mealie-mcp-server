@@ -317,7 +317,7 @@ Use the returned `slug` for later calls, because a rename can change it.
 
 - `parse_ingredients` - Resolve one or more ingredient lines in one request; always returns a list
 
-### Meal Plan Tools (6 operations)
+### Meal Plan Tools (8 operations)
 
 - `get_all_mealplans` - List meal plans
 - `create_mealplan` - Create meal plan entry (optional `recipe_scale`)
@@ -325,11 +325,13 @@ Use the returned `slug` for later calls, because a rename can change it.
 - `update_mealplan` - Update an entry while preserving omitted fields
 - `delete_mealplan` - Delete an entry
 - `get_todays_mealplan` - Get today's meals
+- `get_mealplan_ical_feed` - Get the public calendar subscription URL, if enabled
+- `set_mealplan_ical_feed` - Enable (issuing a new URL) or disable the calendar feed
 
-**Total: 82 tools**
+**Total: 84 tools**
 
 With `MEALIE_ENABLE_AI_IMPORT=true`, `import_recipe_with_ai` adds one optional
-recipe operation: **83 total tools, including 14 recipe tools**. It is absent
+recipe operation: **85 total tools, including 14 recipe tools**. It is absent
 from discovery and cannot be called when disabled.
 
 ### Migrating consolidated tools (breaking change)

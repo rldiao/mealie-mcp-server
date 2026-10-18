@@ -7,8 +7,40 @@ from utils import format_api_params
 logger = logging.getLogger("mealie-mcp")
 
 
+MEALPLAN_ICAL = "/api/households/mealplans/ical"
+
+
 class MealplanMixin:
     """Mixin class for mealplan-related API endpoints"""
+
+    def _ical_feed(self, response: Dict[str, Any]) -> Dict[str, Any]:
+        token = response.get("mealplanIcalToken") if isinstance(response, dict) else None
+        return {
+            "enabled": bool(token),
+            "feedUrl": f"{self.base_url}{MEALPLAN_ICAL}/{token}" if token else None,
+        }
+
+    def get_mealplan_ical_feed(self) -> Dict[str, Any]:
+        """Get the household's meal plan iCal subscription URL, if enabled.
+
+        Returns:
+            {"enabled": bool, "feedUrl": str | None}
+        """
+        logger.info({"message": "Retrieving mealplan iCal feed"})
+        return self._ical_feed(self._handle_request("GET", MEALPLAN_ICAL))
+
+    def set_mealplan_ical_feed(self, enabled: bool) -> Dict[str, Any]:
+        """Enable the feed with a new token, or disable it.
+
+        Enabling always issues a new token, so any previous feed URL stops
+        working.
+
+        Returns:
+            {"enabled": bool, "feedUrl": str | None}
+        """
+        method = "POST" if enabled else "DELETE"
+        logger.info({"message": "Changing mealplan iCal feed", "enabled": enabled})
+        return self._ical_feed(self._handle_request(method, MEALPLAN_ICAL))
 
     def get_mealplans(
         self,

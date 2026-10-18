@@ -60,6 +60,11 @@ class MealieClient:
             metadata["status_code"] = error.response.status_code
         logger.error(metadata)
 
+    @property
+    def base_url(self) -> str:
+        """The Mealie origin (plus any subpath), without a trailing slash."""
+        return str(self._client.base_url).rstrip("/")
+
     def _handle_request(self, method: str, url: str, **kwargs) -> Dict[str, Any] | str:
         """Common request handler with error handling for all API calls.
 

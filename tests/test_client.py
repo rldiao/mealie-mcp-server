@@ -49,6 +49,13 @@ def test_initialization_sets_authentication_and_timeout(make_client):
     client.close()
 
 
+def test_base_url_has_no_trailing_slash(make_client):
+    make_client()
+    client = MealieClient("https://private-host.invalid", "synthetic-key")
+    assert client.base_url == "https://private-host.invalid"
+    client.close()
+
+
 @pytest.mark.parametrize("payload", [{"detail": "private-response"}, "private-response"])
 def test_http_errors_never_log_content_or_include_it_in_message(make_client, caplog, payload):
     response = (

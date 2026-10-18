@@ -88,6 +88,8 @@ class FakeFetcher(MealieFetcher):
     so the real mixin methods run and we can assert on the requests they build.
     """
 
+    base_url = "https://mealie.example/sub"
+
     def __init__(self):
         self.requests = []
         self.created_slug = "test-recipe"

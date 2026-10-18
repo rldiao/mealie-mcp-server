@@ -157,6 +157,38 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             return mealie.delete_mealplan(item_id)
 
     @mcp.tool()
+    def get_mealplan_ical_feed() -> Dict[str, Any]:
+        """Get the household's meal plan calendar (iCal) subscription URL.
+
+        The URL needs no login: anyone who has it can read the household's
+        meal plan, so share it only with the people it is meant for.
+
+        Returns:
+            Dict[str, Any]: {"enabled": bool, "feedUrl": str or null}.
+        """
+        with tool_error_boundary("Error fetching mealplan iCal feed"):
+            return mealie.get_mealplan_ical_feed()
+
+    @mcp.tool()
+    def set_mealplan_ical_feed(enabled: bool) -> Dict[str, Any]:
+        """Turn the meal plan calendar (iCal) feed on or off (Mealie 3.29+).
+
+        Turning it on issues a new URL that calendar apps (Google, Apple, Home
+        Assistant, ...) can subscribe to without logging in, and any previous
+        URL stops working. Only enable it, or re-enable it to rotate a leaked
+        URL, when the user asks. Turning it off revokes the URL. Requires
+        permission to manage the household.
+
+        Args:
+            enabled: True to issue a new feed URL, False to disable the feed.
+
+        Returns:
+            Dict[str, Any]: {"enabled": bool, "feedUrl": str or null}.
+        """
+        with tool_error_boundary("Error changing mealplan iCal feed"):
+            return mealie.set_mealplan_ical_feed(enabled)
+
+    @mcp.tool()
     def get_todays_mealplan() -> List[Dict[str, Any]]:
         """Get the mealplan entries for today.
 
