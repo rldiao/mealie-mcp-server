@@ -109,7 +109,7 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
     @mcp.tool()
     def update_mealplan(
-        entry_id: str,
+        entry_id: int | str,
         date: Optional[str] = None,
         recipe_id: Optional[str] = None,
         title: Optional[str] = None,
@@ -144,7 +144,7 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             return mealie.update_mealplan(entry_id, entry_data)
 
     @mcp.tool()
-    def delete_mealplan(item_id: str) -> Dict[str, Any]:
+    def delete_mealplan(item_id: int | str) -> Dict[str, Any]:
         """Delete a specific meal plan entry.
 
         Args:

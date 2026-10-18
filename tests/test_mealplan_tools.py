@@ -137,6 +137,20 @@ async def test_mealplan_update_sets_recipe_scale_and_keeps_fields(invoke, fetche
     assert fetcher.last()["json"] == {**CURRENT_MEAL, "recipeScale": 1.5}
 
 
+async def test_mealplan_tools_accept_integer_entry_ids(invoke, fetcher):
+    # Mealie returns meal plan ids as integers; callers pass them back as-is.
+    fetcher.responses["GET", f"{MEALPLANS}/7"] = {**CURRENT_MEAL, "id": 7}
+    fetcher.responses["PUT", f"{MEALPLANS}/7"] = {**CURRENT_MEAL, "id": 7}
+    fetcher.responses["DELETE", f"{MEALPLANS}/7"] = {"success": True}
+    await invoke("update_mealplan", entry_id=7, title="Renamed")
+    await invoke("delete_mealplan", item_id=7)
+    assert [(r["method"], r["url"]) for r in fetcher.requests] == [
+        ("GET", f"{MEALPLANS}/7"),
+        ("PUT", f"{MEALPLANS}/7"),
+        ("DELETE", f"{MEALPLANS}/7"),
+    ]
+
+
 async def test_bulk_mealplan_failure_reports_only_completed_progress(
     invoke, fetcher, monkeypatch, caplog
 ):
