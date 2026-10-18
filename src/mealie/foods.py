@@ -40,6 +40,15 @@ class FoodsMixin:
         logger.info({"message": "Retrieving foods"})
         return self._handle_request("GET", "/api/foods", params=params)
 
+    def get_empty_foods(self) -> List[Dict[str, Any]]:
+        """Get all foods that no recipe uses.
+
+        Returns:
+            List of unused foods
+        """
+        logger.info({"message": "Retrieving empty foods"})
+        return self._handle_request("GET", "/api/foods/empty")
+
     def create_food(
         self,
         name: str,

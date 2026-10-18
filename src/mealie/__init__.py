@@ -4,6 +4,7 @@ from .foods import FoodsMixin
 from .group import GroupMixin
 from .labels import LabelsMixin
 from .mealplan import MealplanMixin
+from .organizers import OrganizersMixin
 from .parser import ParserMixin
 from .recipe import RecipeMixin
 from .shopping_list import ShoppingListMixin
@@ -21,6 +22,7 @@ class MealieFetcher(
     LabelsMixin,
     UnitsMixin,
     ToolsMixin,
+    OrganizersMixin,
     ParserMixin,
     ShoppingListMixin,
     MealplanMixin,

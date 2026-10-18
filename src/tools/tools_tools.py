@@ -35,6 +35,16 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             return mealie.get_tools(search=search, page=page, per_page=per_page)
 
     @mcp.tool()
+    def get_empty_tools() -> List[Dict[str, Any]]:
+        """Get all tools that no recipe uses (candidates for cleanup or merging).
+
+        Returns:
+            List[Dict[str, Any]]: List of unused tools
+        """
+        with tool_error_boundary("Error fetching empty tools"):
+            return mealie.get_empty_tools()
+
+    @mcp.tool()
     def create_tool(name: str) -> Dict[str, Any]:
         """Create a new recipe tool.
 

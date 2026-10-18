@@ -43,6 +43,15 @@ class ToolsMixin:
         logger.info({"message": "Retrieving tools"})
         return self._handle_request("GET", "/api/organizers/tools", params=params)
 
+    def get_empty_tools(self) -> List[Dict[str, Any]]:
+        """Get all tools that no recipe uses.
+
+        Returns:
+            List of unused tools
+        """
+        logger.info({"message": "Retrieving empty tools"})
+        return self._handle_request("GET", "/api/organizers/tools/empty")
+
     def create_tool(self, name: str) -> Dict[str, Any]:
         """Create a new recipe tool.
 

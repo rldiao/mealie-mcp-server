@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from utils import format_api_params
 
@@ -34,6 +34,15 @@ class LabelsMixin:
 
         logger.info({"message": "Retrieving labels"})
         return self._handle_request("GET", "/api/groups/labels", params=params)
+
+    def get_empty_labels(self) -> List[Dict[str, Any]]:
+        """Get all labels that no recipe uses.
+
+        Returns:
+            List of unused labels
+        """
+        logger.info({"message": "Retrieving empty labels"})
+        return self._handle_request("GET", "/api/groups/labels/empty")
 
     def create_label(self, name: str, color: Optional[str] = None) -> Dict[str, Any]:
         """Create a new group label.

@@ -202,11 +202,12 @@ See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooti
 
 ### Recipe Tools (13 operations)
 
-- `get_recipes` - List/search recipes with advanced filtering
+- `get_recipes` - List/search recipes with advanced filtering, including query
+  filters on time and rating (e.g. `totalTimeSeconds <= 1800`)
 - `get_recipe` - Get complete recipe details, or a summary with `concise=true`
 - `create_recipe` - Create a recipe; only the name is required, with optional
-  ingredients (including substitutions), instructions, metadata, notes,
-  nutrition, and display settings
+  ingredients (including substitutions), instructions, metadata, structured
+  times, notes, nutrition, and display settings
 - `import_recipe_from_url` - Import a recipe from a web page
 - `update_recipe` - Update content or metadata, including notes, nutrition, and
   display settings; omitted fields are preserved, and empty lists clear content
@@ -261,9 +262,10 @@ Use the returned `slug` for later calls, because a rename can change it.
 - `update_tag` - Update tag
 - `delete_tag` - Delete tag
 
-### Food Tools (13 operations)
+### Food Tools (14 operations)
 
 - `get_foods` - List/search foods (resolve IDs for structured ingredients)
+- `get_empty_foods` - Find foods no recipe uses
 - `create_food` - Create a new food
 - `get_food` - Get by ID
 - `update_food` - Update food
@@ -277,9 +279,10 @@ Use the returned `slug` for later calls, because a rename can change it.
 - `set_food_label_by_name` - Set a food's label, resolving food and label by name
 - `set_foods_label_by_name` - Apply one label to multiple foods by name
 
-### Label Tools (5 operations)
+### Label Tools (6 operations)
 
 - `get_labels` - List/search shopping-list labels
+- `get_empty_labels` - Find unused labels
 - `create_label` - Create a new label (optional color)
 - `get_label` - Get by ID
 - `update_label` - Update label
@@ -293,15 +296,21 @@ Use the returned `slug` for later calls, because a rename can change it.
 - `update_unit` - Update unit
 - `delete_unit` - Delete unit
 
-### Kitchen Tools (5 operations)
+### Kitchen Tools (8 operations)
 
 - `get_tools` - List/search recipe tools (includes `householdsWithTool`)
+- `get_empty_tools` - Find tools no recipe uses
 - `create_tool` - Create a new tool
 - `get_tool` - Get by exactly one of `tool_id` or `tool_slug`
 - `update_tool` - Update tool
 - `set_tool_on_hand` - Mark/unmark a tool as owned (by ID) by the current household
 - `mark_tools_on_hand` - Mark/unmark owned tools by name, creating missing tools
 - `delete_tool` - Delete tool
+
+### Organizer Tools (1 operation)
+
+- `merge_organizers` - Merge a duplicate tag, category, tool, label, food, or
+  unit into another, then delete the duplicate
 
 ### Parser Tools (1 operation)
 
@@ -310,16 +319,16 @@ Use the returned `slug` for later calls, because a rename can change it.
 ### Meal Plan Tools (6 operations)
 
 - `get_all_mealplans` - List meal plans
-- `create_mealplan` - Create meal plan entry
+- `create_mealplan` - Create meal plan entry (optional `recipe_scale`)
 - `create_mealplan_bulk` - Create multiple entries
 - `update_mealplan` - Update an entry while preserving omitted fields
 - `delete_mealplan` - Delete an entry
 - `get_todays_mealplan` - Get today's meals
 
-**Total: 77 tools**
+**Total: 81 tools**
 
 With `MEALIE_ENABLE_AI_IMPORT=true`, `import_recipe_with_ai` adds one optional
-recipe operation: **78 total tools, including 14 recipe tools**. It is absent
+recipe operation: **82 total tools, including 14 recipe tools**. It is absent
 from discovery and cannot be called when disabled.
 
 ### Migrating consolidated tools (breaking change)

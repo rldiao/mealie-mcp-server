@@ -34,6 +34,16 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             return mealie.get_foods(search=search, page=page, per_page=per_page)
 
     @mcp.tool()
+    def get_empty_foods() -> List[Dict[str, Any]]:
+        """Get all foods that no recipe uses (candidates for cleanup or merging).
+
+        Returns:
+            List[Dict[str, Any]]: List of unused foods
+        """
+        with tool_error_boundary("Error fetching empty foods"):
+            return mealie.get_empty_foods()
+
+    @mcp.tool()
     def create_food(
         name: str,
         plural_name: Optional[str] = None,

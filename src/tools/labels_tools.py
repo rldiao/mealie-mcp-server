@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
 
@@ -31,6 +31,16 @@ def register_labels_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         """
         with tool_error_boundary("Error fetching labels"):
             return mealie.get_labels(search=search, page=page, per_page=per_page)
+
+    @mcp.tool()
+    def get_empty_labels() -> List[Dict[str, Any]]:
+        """Get all labels that no recipe uses (candidates for cleanup or merging).
+
+        Returns:
+            List[Dict[str, Any]]: List of unused labels
+        """
+        with tool_error_boundary("Error fetching empty labels"):
+            return mealie.get_empty_labels()
 
     @mcp.tool()
     def create_label(name: str, color: Optional[str] = None) -> Dict[str, Any]:
