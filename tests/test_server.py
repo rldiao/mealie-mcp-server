@@ -289,8 +289,6 @@ def test_main_health_failure_raises_before_http_runner(load_server, monkeypatch)
 
 @pytest.mark.parametrize("enable_ai_import", [False, True])
 async def test_http_sessions_initialize_list_and_call_tools(load_server, monkeypatch, enable_ai_import):
-    # sse-starlette's global event must not retain a previous test's event loop.
-    monkeypatch.setattr("sse_starlette.sse.AppStatus.should_exit_event", None)
     monkeypatch.setenv("MEALIE_ENABLE_AI_IMPORT", str(enable_ai_import).lower())
     server, mealie_client, requests, factory = load_server()
     app = server["mcp"].streamable_http_app()
