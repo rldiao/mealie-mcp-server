@@ -186,6 +186,9 @@ class Recipe(BaseModel):
     prepTime: Optional[str] = None
     cookTime: Optional[str] = None
     performTime: Optional[str] = None
+    totalTimeSeconds: Optional[int] = None
+    prepTimeSeconds: Optional[int] = None
+    performTimeSeconds: Optional[int] = None
     description: Optional[str] = None
     recipeCategory: Optional[List[RecipeCategory]] = Field(default_factory=list)
     tags: Optional[List[RecipeTag]] = Field(default_factory=list)

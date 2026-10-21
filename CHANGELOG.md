@@ -48,6 +48,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Preserve Mealie 3.29 structured recipe durations in concise reads and clear
+  only the matching duration when changing its time text. Mealie 3.28 text
+  durations remain supported.
+
 - Recipes now expose `showAssets` and `showNutrition` through their settings.
   Previously, uploaded assets and nutrition could be stored but hidden in the
   Mealie UI when household defaults disabled those cards.
