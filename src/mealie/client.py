@@ -1,10 +1,18 @@
 import json
 import logging
+import re
 from typing import Any, Dict
 
 import httpx
 
 logger = logging.getLogger("mealie-mcp")
+
+
+def path_segment(value: str | int) -> str:
+    """Validate one identifier before interpolation; never repair a route."""
+    if type(value) not in (str, int) or not re.fullmatch(r"[\w-]+", str(value)):
+        raise ValueError("Invalid API path segment")
+    return str(value)
 
 
 class MealieApiError(Exception):
@@ -68,6 +76,8 @@ class MealieClient:
         - Multipart uploads via files= parameter
         - Form data via data= parameter
         """
+        if not re.fullmatch(r"(/[\w-]+)+", url):
+            raise ValueError("Invalid API path")
         try:
             logger.debug({"operation": "Making Mealie API request"})
             # Leave multipart boundaries to httpx and do not mutate caller headers.

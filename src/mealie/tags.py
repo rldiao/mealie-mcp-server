@@ -1,3 +1,4 @@
+from .client import path_segment
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -86,6 +87,7 @@ class TagsMixin:
         Returns:
             JSON response containing the tag details
         """
+        tag_id = path_segment(tag_id)
         if not tag_id:
             raise ValueError("Tag ID cannot be empty")
 
@@ -101,6 +103,7 @@ class TagsMixin:
         Returns:
             JSON response containing the tag details
         """
+        tag_slug = path_segment(tag_slug)
         if not tag_slug:
             raise ValueError("Tag slug cannot be empty")
 
@@ -117,6 +120,7 @@ class TagsMixin:
         Returns:
             JSON response containing the updated tag
         """
+        tag_id = path_segment(tag_id)
         if not tag_id:
             raise ValueError("Tag ID cannot be empty")
         if not tag_data:
@@ -134,6 +138,7 @@ class TagsMixin:
         Returns:
             JSON response confirming deletion
         """
+        tag_id = path_segment(tag_id)
         if not tag_id:
             raise ValueError("Tag ID cannot be empty")
 

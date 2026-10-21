@@ -1,3 +1,4 @@
+from .client import path_segment
 import logging
 from typing import Any, Dict, Optional
 
@@ -69,6 +70,7 @@ class ToolsMixin:
         Returns:
             JSON response containing the tool details
         """
+        tool_id = path_segment(tool_id)
         if not tool_id:
             raise ValueError("Tool ID cannot be empty")
 
@@ -84,6 +86,7 @@ class ToolsMixin:
         Returns:
             JSON response containing the tool details
         """
+        tool_slug = path_segment(tool_slug)
         if not tool_slug:
             raise ValueError("Tool slug cannot be empty")
 
@@ -105,6 +108,7 @@ class ToolsMixin:
         Returns:
             JSON response containing the updated tool
         """
+        tool_id = path_segment(tool_id)
         if not tool_id:
             raise ValueError("Tool ID cannot be empty")
         if not tool_data:
@@ -129,6 +133,7 @@ class ToolsMixin:
         Returns:
             JSON response confirming deletion
         """
+        tool_id = path_segment(tool_id)
         if not tool_id:
             raise ValueError("Tool ID cannot be empty")
 
