@@ -1,6 +1,7 @@
 from typing import Any, Dict, Optional
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from mealie import MealieFetcher
 from tools.errors import tool_error_boundary
@@ -9,7 +10,10 @@ from tools.errors import tool_error_boundary
 def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     """Register all food-related tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_foods(
         search: Optional[str] = None,
         page: Optional[int] = None,
@@ -33,7 +37,10 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error fetching foods"):
             return mealie.get_foods(search=search, page=page, per_page=per_page)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False,
+        idempotentHint=False, openWorldHint=False
+    ))
     def create_food(
         name: str,
         plural_name: Optional[str] = None,
@@ -64,7 +71,10 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 label_id=label_id,
             )
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_food(food_id: str) -> Dict[str, Any]:
         """Get a specific food by ID.
 
@@ -77,7 +87,10 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error fetching food"):
             return mealie.get_food(food_id)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def update_food(
         food_id: str,
         name: Optional[str] = None,
@@ -121,7 +134,10 @@ def register_foods_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
             return mealie.update_food(food_id, food_data)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def delete_food(food_id: str) -> Dict[str, Any]:
         """Delete a specific food.
 

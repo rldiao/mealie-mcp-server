@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from mealie import MealieFetcher
 from tools.errors import tool_error_boundary
@@ -9,7 +10,10 @@ from tools.errors import tool_error_boundary
 def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     """Register all tag-related tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_tags(
         page: Optional[int] = None,
         per_page: Optional[int] = None,
@@ -26,7 +30,10 @@ def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error fetching tags"):
             return mealie.get_tags(page=page, per_page=per_page)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_empty_tags() -> List[Dict[str, Any]]:
         """Get all tags that have no recipes assigned.
 
@@ -36,7 +43,10 @@ def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error fetching empty tags"):
             return mealie.get_empty_tags()
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False,
+        idempotentHint=False, openWorldHint=False
+    ))
     def create_tag(name: str) -> Dict[str, Any]:
         """Create a new recipe tag.
 
@@ -49,7 +59,10 @@ def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error creating tag"):
             return mealie.create_tag(name)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_tag(
         tag_id: Optional[str] = None,
         tag_slug: Optional[str] = None,
@@ -74,7 +87,10 @@ def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 return mealie.get_tag(tag_id)
             return mealie.get_tag_by_slug(tag_slug)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def update_tag(
         tag_id: str,
         name: Optional[str] = None,
@@ -98,7 +114,10 @@ def register_tags_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
             return mealie.update_tag(tag_id, tag_data)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def delete_tag(tag_id: str) -> Dict[str, Any]:
         """Delete a specific tag.
 

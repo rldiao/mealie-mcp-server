@@ -1,6 +1,7 @@
 from typing import Any, Dict, Optional
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from mealie import MealieFetcher
 from tools.errors import tool_error_boundary
@@ -9,7 +10,10 @@ from tools.errors import tool_error_boundary
 def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     """Register all recipe-tool (kitchen equipment) tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_tools(
         search: Optional[str] = None,
         page: Optional[int] = None,
@@ -34,7 +38,10 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error fetching tools"):
             return mealie.get_tools(search=search, page=page, per_page=per_page)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False,
+        idempotentHint=False, openWorldHint=False
+    ))
     def create_tool(name: str) -> Dict[str, Any]:
         """Create a new recipe tool.
 
@@ -47,7 +54,10 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error creating tool"):
             return mealie.create_tool(name)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_tool(
         tool_id: Optional[str] = None,
         tool_slug: Optional[str] = None,
@@ -72,7 +82,10 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 return mealie.get_tool(tool_id)
             return mealie.get_tool_by_slug(tool_slug)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def update_tool(
         tool_id: str,
         name: Optional[str] = None,
@@ -96,7 +109,10 @@ def register_tools_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
             return mealie.update_tool(tool_id, tool_data)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def delete_tool(tool_id: str) -> Dict[str, Any]:
         """Delete a specific tool.
 

@@ -8,7 +8,6 @@ and returns canned responses. No network access is required.
 from copy import deepcopy
 
 import pytest
-from mcp.server.fastmcp import FastMCP
 
 from mealie import MealieFetcher
 from mealie.client import MealieApiError
@@ -255,7 +254,8 @@ def fetcher():
 
 @pytest.fixture
 def server(fetcher):
-    mcp = FastMCP("test")
+    from server import _MealieServer
+    mcp = _MealieServer(None)
     register_all_tools(mcp, fetcher)
     return mcp, fetcher
 

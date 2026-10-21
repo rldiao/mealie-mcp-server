@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from mcp.server.fastmcp.exceptions import ToolError
 
 from mealie import MealieFetcher
@@ -14,7 +15,10 @@ from tools.errors import tool_error_boundary
 def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     """Register all mealplan-related tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_all_mealplans(
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
@@ -40,7 +44,10 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 per_page=per_page,
             )
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False,
+        idempotentHint=False, openWorldHint=False
+    ))
     def create_mealplan(
         date: str,
         recipe_id: Optional[str] = None,
@@ -66,7 +73,10 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 entry_type=entry_type,
             )
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False,
+        idempotentHint=False, openWorldHint=False
+    ))
     def create_mealplan_bulk(
         entries: List[MealPlanEntry],
     ) -> Dict[str, Any]:
@@ -102,7 +112,10 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 completed.append({"index": index, "id": result.get("id")})
             return {"message": f"Successfully created {len(entries)} mealplan entries"}
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def update_mealplan(
         entry_id: str,
         date: Optional[str] = None,
@@ -134,7 +147,10 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 raise ValueError("At least one field must be provided to update")
             return mealie.update_mealplan(entry_id, entry_data)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def delete_mealplan(item_id: str) -> Dict[str, Any]:
         """Delete a specific meal plan entry.
 
@@ -147,7 +163,10 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error deleting mealplan entry"):
             return mealie.delete_mealplan(item_id)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_todays_mealplan() -> List[Dict[str, Any]]:
         """Get the mealplan entries for today.
 

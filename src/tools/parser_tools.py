@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from mealie import MealieFetcher
 from tools.errors import tool_error_boundary
@@ -42,7 +43,10 @@ def _validate_parser(parser: str) -> None:
 def register_parser_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     """Register the ingredient-parser tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=True
+    ))
     def parse_ingredients(
         ingredients: List[str], parser: str = "nlp", verbose: bool = False
     ) -> List[Dict[str, Any]]:

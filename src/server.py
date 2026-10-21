@@ -1,5 +1,10 @@
 import logging
 import os
+import inspect
+from functools import partial, wraps
+
+import anyio
+from anyio.lowlevel import RunVar
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
@@ -114,6 +119,8 @@ class _MealieServer(FastMCP):
     def __init__(self, config: ServerConfig | None):
         self.client_provider = _ClientProvider(config)
         self._ai_import_registered = False
+        self._worker_limiter = RunVar("mealie-worker-limiter")
+        self._write_lock = RunVar("mealie-short-write-lock")
 
         @asynccontextmanager
         async def lifespan(_: FastMCP) -> AsyncIterator[dict[str, MealieFetcher]]:
@@ -128,6 +135,47 @@ class _MealieServer(FastMCP):
             log_level=config.log_level if config else "INFO",
             lifespan=lifespan,
         )
+
+    def tool(self, *args, **kwargs):
+        """Keep synchronous API calls off the loop, with four workers per loop.
+
+        Cancellation waits for in-flight requests: abandoning a worker could close
+        its shared HTTP client or hide a write whose outcome is still unknown.
+        """
+        register = super().tool(*args, **kwargs)
+        hints = kwargs.get("annotations")
+        serial = hints is not None and not hints.readOnlyHint and not hints.openWorldHint
+
+        def decorate(function):
+            if inspect.iscoroutinefunction(function):
+                register(function)
+            else:
+                @wraps(function)
+                async def call(*call_args, **call_kwargs):
+                    limiter = self._worker_limiter.get(None)
+                    if limiter is None:
+                        limiter = anyio.CapacityLimiter(4)
+                        self._worker_limiter.set(limiter)
+                    async def run():
+                        return await anyio.to_thread.run_sync(
+                            partial(function, *call_args, **call_kwargs),
+                            abandon_on_cancel=False, limiter=limiter,
+                        )
+
+                    if serial:
+                        # Restore ordering of short read-modify-write tools,
+                        # including parallel calls from one chat response.
+                        lock = self._write_lock.get(None)
+                        if lock is None:
+                            lock = anyio.Lock()
+                            self._write_lock.set(lock)
+                        async with lock:
+                            return await run()
+                    return await run()
+                register(call)
+            return function
+
+        return decorate
 
     def _configure_optional_tools(self) -> None:
         config = self.client_provider.configuration()

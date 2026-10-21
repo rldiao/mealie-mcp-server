@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from mealie import MealieFetcher
 from tools.errors import tool_error_boundary
@@ -9,7 +10,10 @@ from tools.errors import tool_error_boundary
 def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     """Register all category-related tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_categories(
         page: Optional[int] = None,
         per_page: Optional[int] = None,
@@ -26,7 +30,10 @@ def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error fetching categories"):
             return mealie.get_categories(page=page, per_page=per_page)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_empty_categories() -> List[Dict[str, Any]]:
         """Get all categories that have no recipes assigned.
 
@@ -36,7 +43,10 @@ def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error fetching empty categories"):
             return mealie.get_empty_categories()
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False,
+        idempotentHint=False, openWorldHint=False
+    ))
     def create_category(name: str) -> Dict[str, Any]:
         """Create a new recipe category.
 
@@ -49,7 +59,10 @@ def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error creating category"):
             return mealie.create_category(name)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_category(
         category_id: Optional[str] = None,
         category_slug: Optional[str] = None,
@@ -76,7 +89,10 @@ def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 return mealie.get_category(category_id)
             return mealie.get_category_by_slug(category_slug)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def update_category(
         category_id: str,
         name: Optional[str] = None,
@@ -100,7 +116,10 @@ def register_categories_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
             return mealie.update_category(category_id, category_data)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def delete_category(category_id: str) -> Dict[str, Any]:
         """Delete a specific category.
 

@@ -7,6 +7,7 @@ from copy import deepcopy
 from typing import Any, Dict, List, Optional, Union
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from mcp.server.fastmcp.exceptions import ToolError
 
 from mealie import MealieFetcher
@@ -224,7 +225,10 @@ def _create_populated_recipe(
 def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     """Register all recipe-related tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_recipes(
         search: Optional[str] = None,
         page: Optional[int] = None,
@@ -265,7 +269,10 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 require_all_categories=require_all_categories,
             )
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_recipe(slug: str, concise: bool = False) -> Dict[str, Any]:
         """Retrieve a recipe, optionally returning only a concise summary.
 
@@ -301,7 +308,10 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 exclude_none=True,
             )
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False,
+        idempotentHint=False, openWorldHint=True
+    ))
     def import_recipe_from_url(
         url: str, include_tags: bool = False
     ) -> Dict[str, Any]:
@@ -338,7 +348,10 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             with _created_recipe_stage(slug, "fetch"):
                 return mealie.get_recipe(slug)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False,
+        idempotentHint=False, openWorldHint=True
+    ))
     def create_recipe(
         name: str,
         description: Optional[str] = None,
@@ -424,7 +437,10 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             )
             return _create_populated_recipe(mealie, name, changes, image_url)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def update_recipe(
         slug: str,
         name: Optional[str] = None,
@@ -516,7 +532,10 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
             return mealie.patch_recipe(slug, recipe_data)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False,
+        idempotentHint=False, openWorldHint=False
+    ))
     def duplicate_recipe(slug: str, name: Optional[str] = None) -> Dict[str, Any]:
         """Duplicate an existing recipe, creating a copy with a new slug.
 
@@ -530,7 +549,10 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error duplicating recipe"):
             return mealie.duplicate_recipe(slug, name)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def mark_recipe_last_made(slug: str) -> Dict[str, Any]:
         """Mark a recipe as having been made today (updates last made timestamp).
 
@@ -543,7 +565,10 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error updating recipe last made"):
             return mealie.update_recipe_last_made(slug)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=True
+    ))
     def set_recipe_image_from_url(slug: str, image_url: str) -> Dict[str, Any]:
         """Set a recipe's image by scraping it from a URL.
 
@@ -557,7 +582,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error setting recipe image from URL"):
             return mealie.scrape_recipe_image_from_url(slug, image_url)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=False))
     def upload_recipe_image_file(
         slug: str, image_path: str, extension: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -585,7 +610,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             filename = os.path.basename(image_path)
             return mealie.upload_recipe_image(slug, image_data, filename, extension)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False))
     def upload_recipe_asset_file(
         slug: str,
         asset_path: str,
@@ -619,7 +644,10 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 slug, asset_data, filename, name=name, icon=icon, extension=extension
             )
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def update_recipe_categories_and_tags(
         slug: str,
         category_ids: Optional[List[str]] = None,
@@ -640,7 +668,10 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error updating recipe categories and tags"):
             return mealie.set_recipe_categories_and_tags(slug, category_ids=category_ids, tag_ids=tag_ids)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def delete_recipe(slug: str) -> Dict[str, Any]:
         """Delete a recipe permanently.
 

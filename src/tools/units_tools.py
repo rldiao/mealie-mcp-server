@@ -1,6 +1,7 @@
 from typing import Any, Dict, Optional
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from mealie import MealieFetcher
 from tools.errors import tool_error_boundary
@@ -9,7 +10,10 @@ from tools.errors import tool_error_boundary
 def register_units_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     """Register all unit-related tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_units(
         search: Optional[str] = None,
         page: Optional[int] = None,
@@ -31,7 +35,10 @@ def register_units_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error fetching units"):
             return mealie.get_units(search=search, page=page, per_page=per_page)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False,
+        idempotentHint=False, openWorldHint=False
+    ))
     def create_unit(
         name: str,
         abbreviation: Optional[str] = None,
@@ -57,7 +64,10 @@ def register_units_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 description=description,
             )
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_unit(unit_id: str) -> Dict[str, Any]:
         """Get a specific unit by ID.
 
@@ -70,7 +80,10 @@ def register_units_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error fetching unit"):
             return mealie.get_unit(unit_id)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def update_unit(
         unit_id: str,
         name: Optional[str] = None,
@@ -106,7 +119,10 @@ def register_units_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
             return mealie.update_unit(unit_id, unit_data)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def delete_unit(unit_id: str) -> Dict[str, Any]:
         """Delete a specific unit.
 

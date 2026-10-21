@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from mealie import MealieFetcher
 from models.shopping_list import ShoppingListItemCreate, ShoppingListItemUpdate
@@ -12,7 +13,10 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
     # Shopping List Operations
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_shopping_lists(
         page: Optional[int] = None,
         per_page: Optional[int] = None,
@@ -29,7 +33,10 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error fetching shopping lists"):
             return mealie.get_shopping_lists(page=page, per_page=per_page)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False,
+        idempotentHint=False, openWorldHint=False
+    ))
     def create_shopping_list(name: str) -> Dict[str, Any]:
         """Create a new shopping list.
 
@@ -42,7 +49,10 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error creating shopping list"):
             return mealie.create_shopping_list(name)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_shopping_list(list_id: str) -> Dict[str, Any]:
         """Get a specific shopping list by ID.
 
@@ -55,7 +65,10 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error fetching shopping list"):
             return mealie.get_shopping_list(list_id)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def update_shopping_list(list_id: str, name: str) -> Dict[str, Any]:
         """Update a shopping list's properties (e.g. rename it).
 
@@ -69,7 +82,10 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error updating shopping list"):
             return mealie.update_shopping_list(list_id, {"name": name})
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def delete_shopping_list(list_id: str) -> Dict[str, Any]:
         """Delete a specific shopping list.
 
@@ -82,7 +98,10 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error deleting shopping list"):
             return mealie.delete_shopping_list(list_id)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False,
+        idempotentHint=False, openWorldHint=False
+    ))
     def add_recipe_to_shopping_list(
         list_id: str,
         recipe_id: str,
@@ -103,7 +122,10 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 list_id, recipe_id, recipe_increment_quantity
             )
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def remove_recipe_from_shopping_list(
         list_id: str,
         recipe_id: str,
@@ -122,7 +144,10 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
     # Shopping List Item Operations
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_shopping_list_items(
         page: Optional[int] = None,
         per_page: Optional[int] = None,
@@ -143,7 +168,10 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 page=page, per_page=per_page, search=search
             )
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False,
+        idempotentHint=True, openWorldHint=False
+    ))
     def get_shopping_list_item(item_id: str) -> Dict[str, Any]:
         """Get a specific shopping list item by ID.
 
@@ -156,7 +184,10 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error fetching shopping list item"):
             return mealie.get_shopping_list_item(item_id)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False,
+        idempotentHint=False, openWorldHint=False
+    ))
     def create_shopping_list_item(
         shopping_list_id: str,
         note: str,
@@ -183,7 +214,10 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 shopping_list_id, note, quantity, unit_id, food_id, label_id
             )
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False,
+        idempotentHint=False, openWorldHint=False
+    ))
     def create_shopping_list_items_bulk(
         items: List[ShoppingListItemCreate],
     ) -> Dict[str, Any]:
@@ -206,7 +240,10 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error creating bulk shopping list items"):
             return mealie.create_shopping_list_items_bulk(items)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def update_shopping_list_item(
         item_id: str,
         note: Optional[str] = None,
@@ -238,7 +275,10 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
 
             return mealie.update_shopping_list_item(item_id, item_data)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def delete_shopping_list_item(item_id: str) -> Dict[str, Any]:
         """Delete a specific shopping list item.
 
@@ -251,7 +291,10 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error deleting shopping list item"):
             return mealie.delete_shopping_list_item(item_id)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def update_shopping_list_items_bulk(
         items: List[ShoppingListItemUpdate],
     ) -> Dict[str, Any]:
@@ -273,7 +316,10 @@ def register_shopping_list_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         with tool_error_boundary("Error updating bulk shopping list items"):
             return mealie.update_shopping_list_items_bulk(items)
 
-    @mcp.tool()
+    @mcp.tool(annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=True,
+        idempotentHint=False, openWorldHint=False
+    ))
     def delete_shopping_list_items_bulk(
         item_ids: List[str],
     ) -> Dict[str, Any]:
