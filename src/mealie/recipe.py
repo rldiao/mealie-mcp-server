@@ -3,13 +3,19 @@ import re
 from typing import Any, Dict, List, Optional
 
 import httpx
-from pydantic import HttpUrl, TypeAdapter, ValidationError
+from pydantic import AnyHttpUrl, TypeAdapter, ValidationError
 
 from mealie.client import MealieApiError
 from models.ai_import import AIProviderCapabilities
 from utils import format_api_params
 
 logger = logging.getLogger("mealie-mcp")
+
+
+def _validate_recipe_source_url(value: str) -> None:
+    """Accept the same URL extraction formats as Mealie 3.28 and 3.29."""
+    if not re.search(r"(https?://|www\.)[^\s]+", value):
+        raise ValueError("Recipe source must contain an HTTP(S) URL")
 
 
 def _upload_extension(filename: str, extension: Optional[str] = None) -> str:
@@ -159,15 +165,27 @@ class RecipeMixin:
         Returns:
             Slug of the newly created recipe
         """
-        if not url.strip():
-            raise ValueError("URL cannot be empty")
+        _validate_recipe_source_url(url)
 
         logger.info({"message": "Importing recipe from URL"})
-        return self._handle_request(
-            "POST",
-            "/api/recipes/create/url",
-            json={"url": url, "includeTags": include_tags},
-        )
+        try:
+            return self._handle_request(
+                "POST", "/api/recipes/create/url",
+                json={"url": url, "includeTags": include_tags},
+                timeout=httpx.Timeout(30.0, read=300.0),
+            )
+        except MealieApiError as error:
+            if error.status_code in (502, 503, 504):
+                raise ValueError(
+                    "URL import proxy failed; creation outcome is unknown. "
+                    "Check Mealie before retrying."
+                ) from None
+            raise
+        except (TimeoutError, ConnectionError):
+            raise ValueError(
+                "URL import connection failed or timed out; creation outcome is unknown. "
+                "Check Mealie for the recipe before retrying or using another import tool."
+            ) from None
 
     def import_recipe_with_ai(
         self,
@@ -186,7 +204,7 @@ class RecipeMixin:
         if not (content or url or images):
             raise ValueError("Provide content, a URL, or at least one image")
         if url is not None:
-            TypeAdapter(HttpUrl).validate_python(url)
+            _validate_recipe_source_url(url)
         for filename, image in images or []:
             if not filename.strip() or not image:
                 raise ValueError("Image filename and data cannot be empty")
@@ -224,6 +242,11 @@ class RecipeMixin:
                 timeout=httpx.Timeout(30.0, read=300.0),
             )
         except MealieApiError as error:
+            if error.status_code in (502, 503, 504):
+                raise ValueError(
+                    "AI import proxy failed; creation outcome is unknown. "
+                    "Check Mealie before retrying."
+                ) from None
             if error.status_code == 404:
                 raise ValueError(
                     "AI import endpoint unavailable; Mealie 3.23.0 or newer is required"
@@ -375,6 +398,7 @@ class RecipeMixin:
         Returns:
             JSON response confirming the image was set
         """
+        TypeAdapter(AnyHttpUrl).validate_python(image_url)
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
         if not image_url:

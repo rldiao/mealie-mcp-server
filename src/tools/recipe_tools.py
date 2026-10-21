@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
+from pydantic import AnyHttpUrl, TypeAdapter
 
 from mealie import MealieFetcher
 from models.recipe import (
@@ -184,7 +185,7 @@ def _created_recipe_stage(slug: str, stage: str):
     try:
         with tool_error_boundary("Error completing created recipe"):
             yield
-    except ToolError:
+    except ToolError as error:
         raise ToolError(
             json.dumps(
                 {
@@ -194,6 +195,7 @@ def _created_recipe_stage(slug: str, stage: str):
                     ),
                     "created_slug": slug,
                     "stage": stage,
+                    "detail": str(error),
                 }
             )
         ) from None
@@ -207,7 +209,7 @@ def _create_populated_recipe(
 ) -> Dict[str, Any]:
     _require_text(name, "Recipe name")
     if image_url is not None:
-        _require_text(image_url, "Image URL")
+        TypeAdapter(AnyHttpUrl).validate_python(image_url)
     slug = mealie.create_recipe(name)
     with _created_recipe_stage(slug, "fetch"):
         current = mealie.get_recipe(slug)
