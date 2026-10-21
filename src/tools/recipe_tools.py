@@ -28,8 +28,7 @@ def _build_ingredient(
 ) -> RecipeIngredient:
     """Coerce a flat string or structured ingredient into a RecipeIngredient.
 
-    A plain string becomes a note for Mealie's natural-language parser to
-    resolve; a structured object maps its fields straight onto the Mealie
+    A plain string is stored as a note without implicit parsing; a structured object maps its fields straight onto the Mealie
     RecipeIngredient model.
     """
     if isinstance(ingredient, str):
@@ -146,11 +145,12 @@ def _recipe_changes(
     _normalize_references(built_ingredients, built_instructions)
     if ingredients is not None:
         changes["recipeIngredient"] = [
-            i.model_dump(exclude_none=True) for i in built_ingredients
+            i.model_dump(exclude_none=True, exclude_unset=True, exclude={"display"})
+            for i in built_ingredients
         ]
     if instructions is not None:
         changes["recipeInstructions"] = [
-            i.model_dump(exclude_none=True) for i in built_instructions
+            i.model_dump(exclude_none=True, exclude_unset=True) for i in built_instructions
         ]
     if tags is not None:
         changes["tags"] = [_organizer_payload(t) for t in tags]
@@ -368,8 +368,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Ingredients and instructions each accept either a plain string or a
         structured object:
 
-        - An ingredient string (e.g. "200 g basmati rice") is resolved by
-          Mealie's natural-language parser into quantity/unit/food.
+        - An ingredient string (e.g. "200 g basmati rice") is stored as a text
+          note. Use parse_ingredients explicitly for quantity/unit/food.
         - An ingredient object can set quantity, note, title, an existing
           Mealie unit/food (by id and name), and a referenceId for step links.
         - An instruction string is the step text; an instruction object can
