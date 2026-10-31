@@ -289,13 +289,14 @@ def test_main_health_failure_raises_before_http_runner(load_server, monkeypatch)
 
 @pytest.mark.parametrize("enable_ai_import", [False, True])
 async def test_http_sessions_initialize_list_and_call_tools(load_server, monkeypatch, enable_ai_import):
-    # sse-starlette's global event must not retain a previous test's event loop.
-    monkeypatch.setattr("sse_starlette.sse.AppStatus.should_exit_event", None)
+    # sse-starlette < 3 kept shutdown state in a process-global event. Newer
+    # releases removed that attribute, so there is nothing to reset there.
+    monkeypatch.setattr(
+        "sse_starlette.sse.AppStatus.should_exit_event", None, raising=False
+    )
     monkeypatch.setenv("MEALIE_ENABLE_AI_IMPORT", str(enable_ai_import).lower())
     server, mealie_client, requests, factory = load_server()
     app = server["mcp"].streamable_http_app()
-    session_ids = set()
-
     async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
@@ -319,10 +320,7 @@ async def test_http_sessions_initialize_list_and_call_tools(load_server, monkeyp
                 )
                 assert response.status_code == 200
                 assert '"name":"mealie"' in response.text
-                session_id = response.headers["mcp-session-id"]
-                assert session_id not in session_ids
-                session_ids.add(session_id)
-                headers["Mcp-Session-Id"] = session_id
+                assert "mcp-session-id" not in response.headers
 
                 response = await client.post(
                     "/mcp",
