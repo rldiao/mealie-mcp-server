@@ -127,6 +127,8 @@ class _MealieServer(FastMCP):
             port=config.port if config else 8765,
             log_level=config.log_level if config else "INFO",
             lifespan=lifespan,
+            # Avoid retaining server-side session state between HTTP requests.
+            stateless_http=True,
         )
 
     def _configure_optional_tools(self) -> None:
