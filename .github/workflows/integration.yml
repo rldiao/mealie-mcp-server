@@ -1,0 +1,35 @@
+name: Integration
+
+# Runs the MCP tools against a real Mealie (the latest image) in Docker.
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+    inputs:
+      mealie_version:
+        description: Mealie image tag
+        default: latest
+
+jobs:
+  live-mealie:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MEALIE_INTEGRATION: "1"
+      MEALIE_VERSION: ${{ inputs.mealie_version || 'latest' }}
+      # keep the container so the log step below can read it
+      MEALIE_INTEGRATION_KEEP: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - run: uv sync --locked --extra dev
+      - run: docker compose -f tests/integration/docker-compose.yml pull
+      - run: uv run pytest -q tests/integration
+      - name: Mealie logs
+        if: failure()
+        run: docker compose -f tests/integration/docker-compose.yml logs --tail 200

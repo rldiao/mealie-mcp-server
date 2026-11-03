@@ -110,11 +110,88 @@ async def test_slug_lookup(invoke, fetcher, singular, plural, endpoint):
     assert len(fetcher.requests) == 1
 
 
-@pytest.mark.parametrize("plural", ["categories", "tags"])
-async def test_empty_lookup(invoke, fetcher, plural):
-    fetcher.responses["GET", f"/api/organizers/{plural}/empty"] = []
-    assert await invoke(f"get_empty_{plural}") == []
-    assert fetcher.last("GET")["url"] == f"/api/organizers/{plural}/empty"
+@pytest.mark.parametrize(
+    "plural, endpoint",
+    [
+        ("categories", "/api/organizers/categories"),
+        ("tags", "/api/organizers/tags"),
+        ("tools", "/api/organizers/tools"),
+        ("foods", "/api/foods"),
+        ("labels", "/api/groups/labels"),
+    ],
+)
+async def test_empty_lookup(invoke, fetcher, plural, endpoint):
+    unused = [{"id": "u1", "name": "Unused"}]
+    fetcher.responses["GET", f"{endpoint}/empty"] = unused
+    assert await invoke(f"get_empty_{plural}") == unused
+    assert [(r["method"], r["url"]) for r in fetcher.requests] == [
+        ("GET", f"{endpoint}/empty")
+    ]
+
+
+@pytest.mark.parametrize("plural", ["tools", "foods", "labels"])
+async def test_empty_lookup_failure_is_tool_error(invoke, fetcher, plural):
+    fetcher.fail_on("/empty", status_code=500)
+    with pytest.raises(ToolError, match=f"Error fetching empty {plural}"):
+        await invoke(f"get_empty_{plural}")
+
+
+MERGES = [
+    ("tag", "POST", "/api/organizers/tags/merge", "fromId", "toId"),
+    ("category", "POST", "/api/organizers/categories/merge", "fromId", "toId"),
+    ("tool", "POST", "/api/organizers/tools/merge", "fromId", "toId"),
+    ("label", "POST", "/api/groups/labels/merge", "fromId", "toId"),
+    ("food", "PUT", "/api/foods/merge", "fromFood", "toFood"),
+    ("unit", "PUT", "/api/units/merge", "fromUnit", "toUnit"),
+]
+
+
+@pytest.mark.parametrize("kind, method, url, from_key, to_key", MERGES)
+async def test_merge_organizers_payloads(
+    invoke, fetcher, kind, method, url, from_key, to_key
+):
+    survivor = {"id": "keep-1", "name": "Keep"}
+    fetcher.responses[method, url] = survivor
+    result = await invoke("merge_organizers", kind=kind, from_id="dup-1", to_id="keep-1")
+    assert result == survivor
+    assert fetcher.requests == [
+        {
+            "method": method,
+            "url": url,
+            "json": {from_key: "dup-1", to_key: "keep-1"},
+            "params": None,
+            "files": None,
+            "data": None,
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"kind": "tag", "from_id": "same", "to_id": "same"},
+        {"kind": "tag", "from_id": " ", "to_id": "keep-1"},
+        {"kind": "tag", "from_id": "dup-1", "to_id": ""},
+        {"kind": "recipe", "from_id": "dup-1", "to_id": "keep-1"},
+    ],
+)
+async def test_merge_organizers_validates_before_request(invoke, fetcher, arguments):
+    with pytest.raises(ToolError):
+        await invoke("merge_organizers", **arguments)
+    assert fetcher.requests == []
+
+
+async def test_merge_organizers_failure_is_tool_error_without_ids_in_logs(
+    invoke, fetcher, caplog
+):
+    caplog.set_level(logging.DEBUG, logger="mealie-mcp")
+    fetcher.fail_on("/merge", status_code=404, message="private-dup not found")
+    with pytest.raises(ToolError, match="Error merging organizers") as error:
+        await invoke(
+            "merge_organizers", kind="tag", from_id="private-dup", to_id="private-keep"
+        )
+    assert "private" not in str(error.value)
+    assert "private" not in caplog.text
 
 
 @pytest.mark.parametrize("operation", ["create", "get", "update", "delete", "noop"])
@@ -311,7 +388,7 @@ async def test_equipment_read_requires_slug(invoke, fetcher):
                 "extras": {"keep": "value"},
                 "pluralName": "Existing foods",
                 "aliases": [{"name": "Alias"}],
-                "householdsWithIngredientFood": ["household-1"],
+                "householdsWithIngredientFood": ["family"],
             },
             {"description": "new"},
             {"description": "new"},
@@ -322,7 +399,7 @@ async def test_equipment_read_requires_slug(invoke, fetcher):
                 "labelId": "label-1",
                 "extras": {"old": "value"},
                 "aliases": [{"name": "Alias"}],
-                "householdsWithIngredientFood": ["household-1"],
+                "householdsWithIngredientFood": ["family"],
             },
             {"label_id": "", "extras": {}},
             {"labelId": None, "extras": {}},
@@ -341,7 +418,7 @@ async def test_equipment_read_requires_slug(invoke, fetcher):
         ),
         (
             "tool",
-            {"slug": "existing", "householdsWithTool": ["household-1"]},
+            {"slug": "existing", "householdsWithTool": ["family"]},
             {"name": "Renamed"},
             {"name": "Renamed"},
         ),
@@ -434,4 +511,4 @@ async def test_lookup_descriptions_match_resource_contracts(server):
     tools = {tool.name: tool for tool in await mcp.list_tools()}
     assert "associated recipes" not in tools["get_category"].description
     assert "ID, slug, and name" in tools["get_category"].description
-    assert "only if its ID appears" in tools["get_tools"].description
+    assert "only if its slug appears" in tools["get_tools"].description

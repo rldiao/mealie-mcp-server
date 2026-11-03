@@ -71,10 +71,12 @@ async def test_invalid_mealplan_filters_do_not_request(invoke, fetcher, dates):
     [
         {"date": "2026-02-30"},
         {"date": "20261001"},
-        {"entry_type": "snack"},
+        {"entry_type": "brunch"},
         {"recipe_id": "   "},
         {"title": "  ", "recipe_id": None},
         {"title": None, "recipe_id": None},
+        {"recipe_scale": 0},
+        {"recipe_scale": -1},
     ],
 )
 @pytest.mark.parametrize("bulk", [False, True])
@@ -115,6 +117,94 @@ async def test_single_and_bulk_mealplan_payloads_and_success(invoke, fetcher):
     assert [request["json"] for request in fetcher.requests[-2:]] == [
         {"date": "2026-10-02", "recipeId": "recipe-2", "entryType": "lunch"},
         {"date": "2026-10-03", "title": "Meal", "entryType": "breakfast"},
+    ]
+
+
+async def test_mealplan_recipe_scale_is_sent_when_given(invoke, fetcher):
+    await invoke(
+        "create_mealplan", date="2026-10-01", recipe_id="recipe-1", recipe_scale=2
+    )
+    assert fetcher.last()["json"]["recipeScale"] == 2
+    await invoke(
+        "create_mealplan_bulk",
+        entries=[{"date": "2026-10-02", "recipe_id": "recipe-2", "recipe_scale": 0.5}],
+    )
+    assert fetcher.last()["json"]["recipeScale"] == 0.5
+
+
+async def test_mealplan_week_entries_filter_and_end_date_are_sent(invoke, fetcher):
+    await invoke("get_all_mealplans", include_week_entries=True)
+    assert fetcher.last()["params"] == {"include_week_entries": True}
+    await invoke(
+        "create_mealplan", date="2026-10-05", end_date="2026-10-11", title="Chili"
+    )
+    assert fetcher.last()["json"] == {
+        "date": "2026-10-05",
+        "endDate": "2026-10-11",
+        "entryType": "breakfast",
+        "title": "Chili",
+    }
+    await invoke(
+        "create_mealplan_bulk",
+        entries=[{"date": "2026-10-05", "end_date": "2026-10-11", "title": "Soup"}],
+    )
+    assert fetcher.last()["json"]["endDate"] == "2026-10-11"
+
+
+@pytest.mark.parametrize("end_date", ["2026-09-30", "2026-02-30", "20261011"])
+async def test_invalid_mealplan_end_dates_make_no_requests(invoke, fetcher, end_date):
+    with pytest.raises(ToolError):
+        await invoke("create_mealplan", date="2026-10-01", end_date=end_date, title="x")
+    with pytest.raises(ToolError):
+        await invoke(
+            "create_mealplan_bulk",
+            entries=[{"date": "2026-10-01", "end_date": end_date, "title": "x"}],
+        )
+    assert fetcher.requests == []
+
+
+async def test_mealplan_update_sets_and_clears_end_date(invoke, fetcher):
+    await invoke("update_mealplan", entry_id="meal-1", end_date="2026-10-07")
+    assert fetcher.last()["json"] == {**CURRENT_MEAL, "endDate": "2026-10-07"}
+    fetcher.responses[("GET", f"{MEALPLANS}/meal-1")] = {
+        **CURRENT_MEAL,
+        "endDate": "2026-10-07",
+    }
+    await invoke("update_mealplan", entry_id="meal-1", title="Renamed")
+    assert fetcher.last()["json"]["endDate"] == "2026-10-07"
+    await invoke("update_mealplan", entry_id="meal-1", clear_end_date=True)
+    assert fetcher.last()["json"]["endDate"] is None
+
+
+async def test_mealplan_update_rejects_end_date_before_date(invoke, fetcher):
+    with pytest.raises(ToolError):
+        await invoke("update_mealplan", entry_id="meal-1", end_date="2026-09-01")
+    with pytest.raises(ToolError):
+        await invoke(
+            "update_mealplan",
+            entry_id="meal-1",
+            end_date="2026-10-07",
+            clear_end_date=True,
+        )
+    assert [request["method"] for request in fetcher.requests] == ["GET"]
+
+
+async def test_mealplan_update_sets_recipe_scale_and_keeps_fields(invoke, fetcher):
+    await invoke("update_mealplan", entry_id="meal-1", recipe_scale=1.5)
+    assert fetcher.last()["json"] == {**CURRENT_MEAL, "recipeScale": 1.5}
+
+
+async def test_mealplan_tools_accept_integer_entry_ids(invoke, fetcher):
+    # Mealie returns meal plan ids as integers; callers pass them back as-is.
+    fetcher.responses["GET", f"{MEALPLANS}/7"] = {**CURRENT_MEAL, "id": 7}
+    fetcher.responses["PUT", f"{MEALPLANS}/7"] = {**CURRENT_MEAL, "id": 7}
+    fetcher.responses["DELETE", f"{MEALPLANS}/7"] = {"success": True}
+    await invoke("update_mealplan", entry_id=7, title="Renamed")
+    await invoke("delete_mealplan", item_id=7)
+    assert [(r["method"], r["url"]) for r in fetcher.requests] == [
+        ("GET", f"{MEALPLANS}/7"),
+        ("PUT", f"{MEALPLANS}/7"),
+        ("DELETE", f"{MEALPLANS}/7"),
     ]
 
 
@@ -212,7 +302,8 @@ async def test_mealplan_update_preserves_fields_and_distinguishes_clear(
         {},
         {"clear_recipe": True, "recipe_id": "replacement"},
         {"date": "2026-02-30"},
-        {"entry_type": "snack"},
+        {"entry_type": "brunch"},
+        {"recipe_scale": 0},
     ],
 )
 async def test_invalid_mealplan_updates_make_no_requests(invoke, fetcher, arguments):
@@ -244,9 +335,11 @@ async def test_typed_mealplan_bulk_tool_schema_preserves_envelope(server):
     meal_schema = schemas["create_mealplan_bulk"]
     assert "entries" in meal_schema["properties"]
     meal = meal_schema["$defs"]["MealPlanEntry"]
-    assert {"date", "recipe_id", "title", "entry_type"} <= set(meal["properties"])
+    assert {"date", "recipe_id", "title", "entry_type", "recipe_scale"} <= set(
+        meal["properties"]
+    )
     assert meal["properties"]["entry_type"]["default"] == "breakfast"
-    assert meal["properties"]["entry_type"]["enum"] == ["breakfast", "lunch", "dinner", "side"]
+    assert meal["properties"]["entry_type"]["enum"] == ["breakfast", "lunch", "dinner", "side", "snack", "drink", "dessert"]
 
 
 async def test_mealplan_logs_exclude_content_and_identifiers(invoke, fetcher, caplog):

@@ -25,14 +25,19 @@ such as Claude Desktop.
 - **Recipes:** Create, read, update, import, duplicate, and delete recipes.
 - **Search:** Filter by text, categories, tags, and tools with AND/OR logic.
 - **Images and assets:** Upload recipe images and files, or set images from URLs.
-- **Nutrition and display:** Set per-serving nutrition and recipe visibility
-  settings such as `showAssets` and `showNutrition`.
+- **Nutrition and display:** Set per-serving nutrition (only the values you
+  pass change) and recipe visibility settings such as `showAssets` and
+  `showNutrition`.
+- **Notes and substitutions:** Write the recipe Notes panel and per-ingredient
+  substitutes; rewriting ingredients keeps existing substitutions.
 - **Ingredients:** Resolve free-text ingredients against Mealie's food and unit
   vocabulary.
 - **Shopping lists:** Manage lists and items, perform bulk operations, and add
   recipe ingredients with quantity scaling.
 - **Organization:** Manage categories, tags, foods, units, and recipe tools; find
-  unused categories and tags.
+  unused categories and tags; add tags to a recipe by name.
+- **Foods and labels:** Manage food aliases and on-hand status, and apply
+  shopping-list labels to foods individually or in bulk by name.
 - **Meal planning:** View, create, update, and delete meal plan entries, create
   multiple entries, and mark recipes as made today.
 
@@ -186,28 +191,42 @@ for remote access, following the [HTTP security guidance](#remote-access).
 "Create a shopping list for this week"
 "Add all ingredients from the lasagna recipe to my shopping list"
 "Plan chicken soup for lunch on Friday"
+"Add a note to the chilli recipe saying it freezes well"
+"Mark eggs, butter, and flour as on hand"
+"Label tomatoes, onions, and garlic as 'Produce'"
 ```
 
 See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooting.
 
 ## Available Tools
 
-### Recipe Tools (12 operations)
+### Recipe Tools (15 operations)
 
-- `get_recipes` - List/search recipes with advanced filtering
+- `get_recipes` - List/search recipes with advanced filtering, including query
+  filters on time and rating (e.g. `totalTimeSeconds <= 1800`) and cookbooks
 - `get_recipe` - Get complete recipe details, or a summary with `concise=true`
 - `create_recipe` - Create a recipe; only the name is required, with optional
-  ingredients, instructions, metadata, nutrition, and display settings
+  ingredients (including substitutions), instructions, metadata, structured
+  times, notes, nutrition, and display settings
 - `import_recipe_from_url` - Import a recipe from a web page
-- `update_recipe` - Update content or metadata, including nutrition and display
-  settings; omitted fields are preserved, and empty lists clear content
+- `update_recipe` - Update content or metadata, including notes, nutrition, and
+  display settings; omitted fields are preserved, and empty lists clear content
 - `duplicate_recipe` - Clone a recipe
 - `mark_recipe_last_made` - Update last made timestamp
+- `rate_recipe` - Set your star rating and/or favorite flag on a recipe
+- `get_my_recipe_ratings` - List your ratings and favorites
 - `set_recipe_image_from_url` - Set image from URL
 - `upload_recipe_image_file` - Upload image file
 - `upload_recipe_asset_file` - Upload document/asset
 - `update_recipe_categories_and_tags` - Replace or clear categories, tags, or both using IDs
+- `add_recipe_tags` - Add tags by name, keeping existing ones (auto-creates unknown names)
 - `delete_recipe` - Delete recipe
+
+`update_recipe`, `mark_recipe_last_made`, `update_recipe_categories_and_tags`,
+and `add_recipe_tags` return a compact `{success, slug, name, updated_fields}`
+summary to save context; the organizer tools also list the resulting tag and
+category names. Pass `return_recipe=true` to get the full updated recipe instead.
+Use the returned `slug` for later calls, because a rename can change it.
 
 ### Shopping List Tools (15 operations)
 
@@ -245,13 +264,33 @@ See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooti
 - `update_tag` - Update tag
 - `delete_tag` - Delete tag
 
-### Food Tools (5 operations)
+### Food Tools (16 operations)
 
 - `get_foods` - List/search foods (resolve IDs for structured ingredients)
+- `get_empty_foods` - Find foods no recipe uses
 - `create_food` - Create a new food
 - `get_food` - Get by ID
 - `update_food` - Update food
 - `delete_food` - Delete food
+- `set_food_on_hand` - Mark/unmark a food as on-hand (by ID) for the current household
+- `mark_foods_on_hand` - Mark/unmark ingredients as on-hand by name, plural, or alias, creating missing foods
+- `get_on_hand_foods` - List the foods the current household has on hand
+- `set_food_aliases` - Replace a food's alias list
+- `add_food_alias` - Add an alias to a food, keeping existing ones
+- `remove_food_alias` - Remove a single alias from a food
+- `set_food_substitutions` - Replace a food's common "may be replaced by" substitutions
+- `set_food_label` - Set or clear a food's label by ID
+- `set_food_label_by_name` - Set a food's label, resolving food and label by name
+- `set_foods_label_by_name` - Apply one label to multiple foods by name
+
+### Label Tools (6 operations)
+
+- `get_labels` - List/search shopping-list labels
+- `get_empty_labels` - Find unused labels
+- `create_label` - Create a new label (optional color)
+- `get_label` - Get by ID
+- `update_label` - Update label
+- `delete_label` - Delete label
 
 ### Unit Tools (5 operations)
 
@@ -261,31 +300,53 @@ See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooti
 - `update_unit` - Update unit
 - `delete_unit` - Delete unit
 
-### Kitchen Tools (5 operations)
+### Kitchen Tools (8 operations)
 
 - `get_tools` - List/search recipe tools (includes `householdsWithTool`)
+- `get_empty_tools` - Find tools no recipe uses
 - `create_tool` - Create a new tool
 - `get_tool` - Get by exactly one of `tool_id` or `tool_slug`
 - `update_tool` - Update tool
+- `set_tool_on_hand` - Mark/unmark a tool as owned (by ID) by the current household
+- `mark_tools_on_hand` - Mark/unmark owned tools by name, creating missing tools
 - `delete_tool` - Delete tool
+
+### Organizer Tools (1 operation)
+
+- `merge_organizers` - Merge a duplicate tag, category, tool, label, food, or
+  unit into another, then delete the duplicate
 
 ### Parser Tools (1 operation)
 
 - `parse_ingredients` - Resolve one or more ingredient lines in one request; always returns a list
 
-### Meal Plan Tools (6 operations)
+### Meal Plan Tools (13 operations)
 
 - `get_all_mealplans` - List meal plans
-- `create_mealplan` - Create meal plan entry
+- `create_mealplan` - Create meal plan entry (optional `recipe_scale`)
 - `create_mealplan_bulk` - Create multiple entries
 - `update_mealplan` - Update an entry while preserving omitted fields
 - `delete_mealplan` - Delete an entry
 - `get_todays_mealplan` - Get today's meals
+- `create_random_mealplan` - Add an entry with a recipe Mealie picks, following the rules
+- `get_mealplan_rules` - List rules that limit random picks by weekday and meal type
+- `create_mealplan_rule` - Create a rule with a recipe query filter
+- `update_mealplan_rule` - Change a rule, keeping omitted fields
+- `delete_mealplan_rule` - Delete a rule
+- `get_mealplan_ical_feed` - Get the public calendar subscription URL, if enabled
+- `set_mealplan_ical_feed` - Enable (issuing a new URL) or disable the calendar feed
 
-**Total: 61 tools**
+### Cookbook Tools (4 operations)
+
+- `get_cookbooks` - List cookbooks (named, saved recipe filters)
+- `create_cookbook` - Create a cookbook from a recipe query filter
+- `update_cookbook` - Change a cookbook, keeping omitted fields
+- `delete_cookbook` - Delete a cookbook (recipes are not affected)
+
+**Total: 96 tools**
 
 With `MEALIE_ENABLE_AI_IMPORT=true`, `import_recipe_with_ai` adds one optional
-recipe operation: **62 total tools, including 13 recipe tools**. It is absent
+recipe operation: **96 total tools, including 16 recipe tools**. It is absent
 from discovery and cannot be called when disabled.
 
 ### Migrating consolidated tools (breaking change)
@@ -384,6 +445,14 @@ cp .env.template .env
 # Edit .env with your Mealie instance details
 ```
 
+If you don't have a Mealie to test against, start a local one at
+<http://localhost:9925> (default login `changeme@example.com` / `MyPassword`;
+data persists in a Docker volume):
+
+```bash
+docker compose -f docker/mealie.docker-compose.yml up -d
+```
+
 Launch the MCP Inspector:
 
 ```bash
@@ -396,6 +465,22 @@ Run the offline checks; these do not require a Mealie instance or credentials:
 uv run ruff check src tests
 uv run pytest -q
 ```
+
+Integration tests in `tests/integration/` run the MCP tools against a real
+Mealie. They are skipped unless `MEALIE_INTEGRATION=1`. Docker is required: the
+tests start a disposable Mealie (the `latest` image, data in tmpfs, port 9926)
+and remove it afterwards. The Integration workflow runs them nightly against
+`latest`, so a Mealie release that breaks a tool shows up as a failed run.
+
+```bash
+MEALIE_INTEGRATION=1 uv run pytest -q tests/integration
+```
+
+Set `MEALIE_VERSION` to pin a Mealie image tag, `MEALIE_INTEGRATION_PORT`
+to change the port, and `MEALIE_INTEGRATION_KEEP=1` to leave the container
+running. To use an existing instance instead of Docker, set
+`MEALIE_INTEGRATION_URL` and `MEALIE_INTEGRATION_API_KEY`. The tests create
+uniquely named data and delete it afterwards, but prefer a throwaway instance.
 
 ### Project Structure
 
@@ -510,6 +595,22 @@ requests and are not atomic. If a later request fails, the tool error includes
 recovery information identifying completed work. Inspect that information and
 the current Mealie state rather than blindly retrying the entire operation.
 A failed or timed-out request may have completed remotely.
+
+### Imports from Your Own Network Fail on Mealie 3.26+
+
+Since 3.26, Mealie only fetches public internet addresses on your behalf. That
+covers `import_recipe_from_url`, `set_recipe_image_from_url`, and image URLs on
+`create_recipe`. Requests to a host on your LAN or a Tailscale address fail
+unless you allow it on the Mealie server, e.g. `HTTP_ALLOW_LIST=100.64.0.0/10`.
+See Mealie's [security settings](https://docs.mealie.io/documentation/getting-started/installation/backend-config/#security).
+
+### Newer Mealie Fields
+
+Structured recipe times, `recipe_scale` on meal plans, food substitutions,
+note-to-step links, organizer merges, the iCal feed, week-long meal plan
+entries (`end_date`), and step durations (`durationSeconds`) need the Mealie
+version that introduced them (3.25 to 3.30). On older servers, the tools that call a
+new endpoint fail with an HTTP error, and new fields may be ignored.
 
 ## Support and Contributing
 

@@ -51,6 +51,7 @@ class RecipeMixin:
         require_all_tags: Optional[bool] = None,
         require_all_categories: Optional[bool] = None,
         require_all_tools: Optional[bool] = None,
+        cookbook: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Provides paginated list of recipes
 
@@ -69,6 +70,7 @@ class RecipeMixin:
             require_all_tags: If True, recipe must have ALL specified tags (AND logic). Default False (OR logic)
             require_all_categories: If True, recipe must have ALL specified categories (AND logic)
             require_all_tools: If True, recipe must have ALL specified tools (AND logic)
+            cookbook: Cookbook slug or ID; returns only recipes the cookbook matches
 
         Returns:
             JSON response containing recipe items and pagination information
@@ -88,6 +90,7 @@ class RecipeMixin:
             "tools": tools,
             "requireAllTags": require_all_tags,
             "requireAllCategories": require_all_categories,
+            "cookbook": cookbook,
             "requireAllTools": require_all_tools,
         }
 
@@ -110,6 +113,17 @@ class RecipeMixin:
 
         logger.info({"message": "Retrieving recipe"})
         return self._handle_request("GET", f"/api/recipes/{slug}")
+
+    def get_recipe_last_made(self, slug: str) -> Optional[str]:
+        """When the current household last made a recipe (None if never).
+
+        Mealie tracks lastMade per household, not on the recipe record.
+        """
+        if not slug:
+            raise ValueError("Recipe slug cannot be empty")
+        logger.info({"message": "Retrieving recipe last made"})
+        summary = self._handle_request("GET", f"/api/households/self/recipes/{slug}")
+        return summary.get("lastMade") if isinstance(summary, dict) else None
 
     def update_recipe(self, slug: str, recipe_data: Dict[str, Any]) -> Dict[str, Any]:
         """Update a specific recipe by its slug
@@ -293,6 +307,51 @@ class RecipeMixin:
         tags = [self.get_tag(tid) for tid in tag_ids]
         return self._handle_request("PATCH", f"/api/recipes/{slug}", json={"tags": tags})
 
+    def add_recipe_tags(self, slug: str, tag_names: List[str]) -> Dict[str, Any]:
+        """Add one or more tags to a recipe without removing existing tags.
+
+        Tag names are matched case-insensitively against the recipe's current
+        tags and against Mealie's existing tags; a name with no match is
+        created as a new tag.
+
+        Args:
+            slug: The slug identifier of the recipe
+            tag_names: Tag names to add (created in Mealie if they don't exist)
+
+        Returns:
+            JSON response containing the updated recipe details
+        """
+        if not slug:
+            raise ValueError("Recipe slug cannot be empty")
+        if not tag_names:
+            raise ValueError("Tag names cannot be empty")
+
+        logger.info({"message": "Adding recipe tags"})
+
+        recipe = self.get_recipe(slug)
+        merged_tags = list(recipe.get("tags", []))
+        known_names = {(t.get("name") or "").lower() for t in merged_tags}
+
+        for raw_name in tag_names:
+            name = raw_name.strip()
+            if not name or name.lower() in known_names:
+                continue
+
+            matches = self.get_tags(search=name).get("items", [])
+            tag = next(
+                (t for t in matches if (t.get("name") or "").lower() == name.lower()),
+                None,
+            )
+            if tag is None:
+                tag = self.create_tag(name)
+
+            merged_tags.append(tag)
+            known_names.add(name.lower())
+
+        return self._handle_request(
+            "PATCH", f"/api/recipes/{slug}", json={"tags": merged_tags}
+        )
+
     def set_recipe_categories_and_tags(
         self,
         slug: str,
@@ -357,8 +416,9 @@ class RecipeMixin:
 
         # If no timestamp provided, use current time
         if not timestamp:
-            from datetime import datetime
-            timestamp = datetime.utcnow().isoformat() + "Z"
+            from datetime import UTC, datetime
+
+            timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
         payload = {"timestamp": timestamp}
 

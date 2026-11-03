@@ -4,6 +4,7 @@ patch fields, concise output, image and asset uploads)."""
 import json
 import logging
 import uuid
+from datetime import UTC, datetime, timedelta
 from copy import deepcopy
 
 import pytest
@@ -23,8 +24,9 @@ async def test_recipe_creation_tool_schema_is_consolidated(server):
     assert schema["required"] == ["name"]
     assert set(schema["properties"]) == {
         "name", "description", "org_url", "total_time", "prep_time", "cook_time",
-        "perform_time", "recipe_yield", "servings", "image_url", "ingredients",
-        "instructions", "tags", "tools", "nutrition", "settings",
+        "perform_time", "total_time_seconds", "prep_time_seconds",
+        "perform_time_seconds", "recipe_yield", "servings", "image_url", "ingredients",
+        "instructions", "tags", "tools", "notes", "nutrition", "settings",
     }
 
 
@@ -169,6 +171,90 @@ async def test_update_recipe_maps_all_fields(invoke, fetcher):
     }
 
 
+async def test_create_recipe_sets_structured_times(invoke, fetcher):
+    await invoke(
+        "create_recipe",
+        name="Timed",
+        total_time="25 min",
+        total_time_seconds=1500,
+        prep_time_seconds=600,
+        perform_time_seconds=900,
+    )
+    body = fetcher.last("PUT", "/api/recipes/")["json"]
+    assert body["totalTime"] == "25 min"
+    assert body["totalTimeSeconds"] == 1500
+    assert body["prepTimeSeconds"] == 600
+    assert body["performTimeSeconds"] == 900
+
+
+async def test_update_recipe_patches_structured_times(invoke, fetcher):
+    result = await invoke(
+        "update_recipe", slug="test-recipe", total_time_seconds=0, prep_time_seconds=300
+    )
+    body = fetcher.last("PATCH", "/api/recipes/")["json"]
+    assert body == {"totalTimeSeconds": 0, "prepTimeSeconds": 300}
+    assert result["updated_fields"] == ["totalTimeSeconds", "prepTimeSeconds"]
+
+
+@pytest.mark.parametrize("seconds", [-1, 2**31, 1.5])
+async def test_structured_times_reject_invalid_values(invoke, fetcher, seconds):
+    with pytest.raises(ToolError):
+        await invoke("update_recipe", slug="test-recipe", total_time_seconds=seconds)
+    assert fetcher.requests == []
+
+
+async def test_structured_time_write_failure_is_reported(invoke, fetcher):
+    fetcher.fail_on("/api/recipes/test-recipe")
+    with pytest.raises(ToolError, match="Error updating recipe"):
+        await invoke("update_recipe", slug="test-recipe", total_time_seconds=60)
+
+
+async def test_get_recipe_concise_includes_structured_total_time(invoke, fetcher):
+    fetcher.recipe = {**fetcher.recipe, "totalTimeSeconds": 1800, "prepTimeSeconds": 60}
+    out = await invoke("get_recipe", slug="test-recipe", concise=True)
+    assert out["totalTimeSeconds"] == 1800
+    assert "prepTimeSeconds" not in out
+
+
+async def test_get_recipe_concise_reads_household_last_made(invoke, fetcher):
+    # Mealie keeps lastMade per household, not on the recipe record.
+    fetcher.responses["GET", "/api/households/self/recipes/test-recipe"] = {
+        "recipeId": fetcher.recipe["id"],
+        "lastMade": "2026-10-18T10:00:00Z",
+    }
+    out = await invoke("get_recipe", slug="test-recipe", concise=True)
+    assert out["lastMade"] == "2026-10-18T10:00:00Z"
+    fetcher.responses["GET", "/api/households/self/recipes/test-recipe"] = {"lastMade": None}
+    assert "lastMade" not in await invoke("get_recipe", slug="test-recipe", concise=True)
+
+
+async def test_get_recipes_passes_query_filter_and_order(invoke, fetcher):
+    await invoke(
+        "get_recipes",
+        query_filter="totalTimeSeconds <= 1800 AND rating >= 4",
+        order_by="totalTimeSeconds",
+        order_direction="asc",
+    )
+    params = fetcher.last("GET", "/api/recipes")["params"]
+    assert params["queryFilter"] == "totalTimeSeconds <= 1800 AND rating >= 4"
+    assert params["orderBy"] == "totalTimeSeconds"
+    assert params["orderDirection"] == "asc"
+
+
+async def test_get_recipes_omits_unset_filters(invoke, fetcher):
+    await invoke("get_recipes")
+    params = fetcher.last("GET", "/api/recipes")["params"]
+    assert "queryFilter" not in params
+    assert "orderBy" not in params
+    assert params["orderDirection"] == "desc"
+
+
+async def test_get_recipes_rejects_unknown_order_direction(invoke, fetcher):
+    with pytest.raises(ToolError):
+        await invoke("get_recipes", order_direction="sideways")
+    assert fetcher.requests == []
+
+
 async def test_create_recipe_sets_nutrition(invoke, fetcher):
     await invoke(
         "create_recipe",
@@ -197,7 +283,11 @@ async def test_update_recipe_sets_nutrition(invoke, fetcher):
         nutrition={"calories": "450", "fatContent": "12"},
     )
     body = fetcher.last("PATCH", "/api/recipes/")["json"]
-    assert body == {"nutrition": {"calories": "450", "fatContent": "12"}}
+    # only the given values change and the nutrition card is switched on
+    assert body == {
+        "nutrition": {"calories": "450", "fatContent": "12"},
+        "settings": {**fetcher.recipe["settings"], "showNutrition": True},
+    }
 
 
 async def test_get_recipe_concise_includes_orgurl_tags_tools(invoke, fetcher):
@@ -213,6 +303,367 @@ async def test_get_recipe_concise_includes_orgurl_tags_tools(invoke, fetcher):
     assert out["orgURL"] == "https://example.com/r"
     assert out["tags"] == [{"id": "t1", "name": "Quick", "slug": "quick"}]
     assert out["tools"][0]["name"] == "Pfanne"
+
+
+async def test_add_recipe_tags_creates_new_tag(invoke, fetcher):
+    fetcher.recipe = {
+        **fetcher.recipe,
+        "tags": [{"id": "t1", "name": "Quick", "slug": "quick"}],
+    }
+
+    await invoke("add_recipe_tags", slug="test-recipe", tags=["Healthy"])
+
+    create_call = fetcher.last("POST", "/api/organizers/tags")
+    assert create_call["json"] == {"name": "Healthy"}
+
+    body = fetcher.last("PATCH", "/api/recipes/test-recipe")["json"]
+    assert body["tags"] == [
+        {"id": "t1", "name": "Quick", "slug": "quick"},
+        {"id": "tag-1", "name": "Healthy", "slug": "healthy"},
+    ]
+
+
+async def test_add_recipe_tags_reuses_existing_mealie_tag(invoke, fetcher):
+    fetcher.tags = [{"id": "existing-1", "name": "Healthy", "slug": "healthy"}]
+    fetcher.recipe = {**fetcher.recipe, "tags": []}
+
+    await invoke("add_recipe_tags", slug="test-recipe", tags=["healthy"])
+
+    assert fetcher.last("POST", "/api/organizers/tags") is None
+    body = fetcher.last("PATCH", "/api/recipes/test-recipe")["json"]
+    assert body["tags"] == [{"id": "existing-1", "name": "Healthy", "slug": "healthy"}]
+
+
+async def test_add_recipe_tags_skips_tag_already_on_recipe(invoke, fetcher):
+    fetcher.recipe = {
+        **fetcher.recipe,
+        "tags": [{"id": "t1", "name": "Quick", "slug": "quick"}],
+    }
+
+    await invoke("add_recipe_tags", slug="test-recipe", tags=["Quick", "Quick"])
+
+    assert fetcher.last("POST", "/api/organizers/tags") is None
+    body = fetcher.last("PATCH", "/api/recipes/test-recipe")["json"]
+    assert body["tags"] == [{"id": "t1", "name": "Quick", "slug": "quick"}]
+
+
+async def test_add_recipe_tags_validates_inputs(invoke, fetcher):
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    with pytest.raises(ToolError):
+        await invoke("add_recipe_tags", slug="", tags=["Quick"])
+
+    with pytest.raises(ToolError):
+        await invoke("add_recipe_tags", slug="test-recipe", tags=[])
+
+
+COS_REF = "a1000001-0000-4000-8000-000000000001"
+ROMAINE_ID = "a1000001-0000-4000-8000-000000000002"
+EXISTING_SUBS = [
+    {
+        "substituteFoodId": ROMAINE_ID,
+        "note": None,
+        "substituteFood": {"id": ROMAINE_ID, "name": "Romaine"},
+    }
+]
+
+
+async def test_create_recipe_sends_ingredient_substitutions(invoke, fetcher):
+    await invoke(
+        "create_recipe",
+        name="Salad",
+        ingredients=[
+            {
+                "note": "Cos lettuce",
+                "substitutions": [
+                    {"substituteFoodId": ROMAINE_ID},
+                    {"note": "any crisp lettuce"},
+                ],
+            }
+        ],
+        instructions=["Toss."],
+    )
+    ing = fetcher.last("PUT", "/api/recipes/")["json"]["recipeIngredient"][0]
+    assert ing["substitutions"] == [
+        {"substituteFoodId": ROMAINE_ID},
+        {"note": "any crisp lettuce"},
+    ]
+
+
+async def test_create_recipe_rejects_empty_substitution(invoke, fetcher):
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    with pytest.raises(ToolError):
+        await invoke(
+            "create_recipe",
+            name="Salad",
+            ingredients=[{"note": "Cos", "substitutions": [{}]}],
+            instructions=["Toss."],
+        )
+    assert fetcher.last("PUT", "/api/recipes/") is None
+
+
+async def test_update_recipe_keeps_existing_links_when_omitted(invoke, fetcher):
+    fetcher.recipe = {
+        **fetcher.recipe,
+        "recipeIngredient": [
+            {
+                "note": "Cos",
+                "referenceId": COS_REF,
+                "substitutions": EXISTING_SUBS,
+                "referencedRecipe": {"id": "r1", "slug": "dressing"},
+            }
+        ],
+    }
+
+    await invoke(
+        "update_recipe",
+        slug="test-recipe",
+        ingredients=[{"note": "Cos lettuce", "referenceId": COS_REF}, "1 tsp salt"],
+        instructions=["Toss."],
+    )
+
+    ings = fetcher.last("PUT", "/api/recipes/test-recipe")["json"]["recipeIngredient"]
+    assert ings[0]["note"] == "Cos lettuce"
+    assert ings[0]["substitutions"] == EXISTING_SUBS
+    assert ings[0]["referencedRecipe"] == {"id": "r1", "slug": "dressing"}
+    assert "substitutions" not in ings[1]
+
+
+async def test_update_recipe_explicit_substitutions_replace_or_clear(invoke, fetcher):
+    fetcher.recipe = {
+        **fetcher.recipe,
+        "recipeIngredient": [
+            {"note": "Cos", "referenceId": COS_REF, "substitutions": EXISTING_SUBS},
+            {
+                "note": "buttermilk",
+                "referenceId": "a1000001-0000-4000-8000-000000000003",
+                "substitutions": [{"note": "kefir"}],
+            },
+        ],
+    }
+
+    await invoke(
+        "update_recipe",
+        slug="test-recipe",
+        ingredients=[
+            {"note": "Cos", "referenceId": COS_REF, "substitutions": []},
+            {
+                "note": "buttermilk",
+                "referenceId": "a1000001-0000-4000-8000-000000000003",
+                "substitutions": [{"note": "plain yoghurt, thinned"}],
+            },
+        ],
+        instructions=["Toss."],
+    )
+
+    ings = fetcher.last("PUT", "/api/recipes/test-recipe")["json"]["recipeIngredient"]
+    assert ings[0]["substitutions"] == []
+    assert ings[1]["substitutions"] == [{"note": "plain yoghurt, thinned"}]
+
+
+async def test_update_recipe_surfaces_client_failure(invoke, fetcher):
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("mealie down")
+
+    fetcher.update_recipe = boom
+    with pytest.raises(ToolError):
+        await invoke(
+            "update_recipe",
+            slug="test-recipe",
+            ingredients=[{"note": "Cos", "substitutions": [{"note": "Romaine"}]}],
+            instructions=["Toss."],
+        )
+
+
+async def test_update_recipe_sets_notes(invoke, fetcher):
+    await invoke(
+        "update_recipe",
+        slug="test-recipe",
+        notes=[
+            {"title": "Make ahead", "text": "Dressing keeps 3 days."},
+            {"text": "Use Romaine if Cos is unavailable."},
+        ],
+    )
+    call = fetcher.last("PATCH", "/api/recipes/")
+    assert call["url"] == "/api/recipes/test-recipe"
+    assert call["json"] == {
+        "notes": [
+            {"title": "Make ahead", "text": "Dressing keeps 3 days."},
+            {"title": "", "text": "Use Romaine if Cos is unavailable."},
+        ]
+    }
+
+
+async def test_update_recipe_empty_notes_clears_them(invoke, fetcher):
+    await invoke("update_recipe", slug="test-recipe", notes=[])
+    assert fetcher.last("PATCH", "/api/recipes/")["json"] == {"notes": []}
+
+
+async def test_update_recipe_rejects_empty_note(invoke, fetcher):
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    with pytest.raises(ToolError):
+        await invoke(
+            "update_recipe", slug="test-recipe", notes=[{"title": " ", "text": ""}]
+        )
+    assert fetcher.last("PATCH", "/api/recipes/") is None
+
+
+async def test_update_recipe_notes_surfaces_client_failure(invoke, fetcher):
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("mealie down")
+
+    fetcher.patch_recipe = boom
+    with pytest.raises(ToolError):
+        await invoke("update_recipe", slug="test-recipe", notes=[{"text": "x"}])
+
+
+async def test_create_recipe_sets_notes(invoke, fetcher):
+    await invoke(
+        "create_recipe",
+        name="Salad",
+        notes=[{"title": "Serving", "text": "Chill the bowl first."}],
+    )
+    body = fetcher.last("PUT", "/api/recipes/")["json"]
+    assert body["notes"] == [{"title": "Serving", "text": "Chill the bowl first."}]
+
+
+async def test_create_recipe_links_notes_to_steps(invoke, fetcher):
+    v4 = "b2000002-0000-4000-8000-000000000002"
+    await invoke(
+        "create_recipe",
+        name="Linked",
+        notes=[
+            {"title": "Tip", "text": "Rest the dough.", "referenceId": "tip"},
+            {"text": "Freezes well.", "referenceId": v4},
+            {"text": "Unlinked."},
+        ],
+        instructions=[
+            "Mix.",
+            {"text": "Knead.", "noteReferences": [{"referenceId": "tip"}]},
+            {"text": "Bake.", "noteReferences": [{"referenceId": v4}]},
+        ],
+    )
+    body = fetcher.last("PUT", "/api/recipes/")["json"]
+    notes, steps = body["notes"], body["recipeInstructions"]
+    tip_id = notes[0]["referenceId"]
+    # a non-UUID id becomes a UUID v4 shared by the note and the step
+    assert uuid.UUID(tip_id).version == 4
+    assert steps[1]["noteReferences"] == [{"referenceId": tip_id}]
+    assert notes[1]["referenceId"] == v4
+    assert steps[2]["noteReferences"] == [{"referenceId": v4}]
+    # unlinked notes and steps leave the fields for Mealie to default
+    assert "referenceId" not in notes[2]
+    assert "noteReferences" not in steps[0]
+
+
+async def test_create_recipe_sends_step_durations(invoke, fetcher):
+    await invoke(
+        "create_recipe",
+        name="Timed",
+        instructions=["Mix.", {"text": "Rest.", "durationSeconds": 600}],
+    )
+    steps = fetcher.last("PUT", "/api/recipes/")["json"]["recipeInstructions"]
+    assert steps[1]["durationSeconds"] == 600
+    assert "durationSeconds" not in steps[0]
+
+
+@pytest.mark.parametrize("seconds", [0, -5])
+async def test_create_recipe_rejects_non_positive_step_duration(
+    invoke, fetcher, seconds
+):
+    with pytest.raises(ToolError):
+        await invoke(
+            "create_recipe",
+            name="Timed",
+            instructions=[{"text": "Rest.", "durationSeconds": seconds}],
+        )
+    assert fetcher.requests == []
+
+
+async def test_update_recipe_keeps_note_reference_ids(invoke, fetcher):
+    v4 = "b2000002-0000-4000-8000-000000000002"
+    await invoke(
+        "update_recipe",
+        slug="test-recipe",
+        notes=[{"text": "Freezes well.", "referenceId": v4}],
+    )
+    assert fetcher.last("PATCH", "/api/recipes/")["json"] == {
+        "notes": [{"title": "", "text": "Freezes well.", "referenceId": v4}]
+    }
+
+
+async def test_update_recipe_merges_nutrition_and_shows_it(invoke, fetcher):
+    fetcher.recipe = {
+        **fetcher.recipe,
+        "nutrition": {"calories": "400", "fatContent": "20", "sodiumContent": "300"},
+        "settings": {"public": True, "showNutrition": False},
+    }
+
+    await invoke(
+        "update_recipe",
+        slug="test-recipe",
+        nutrition={
+            "calories": 450,
+            "proteinContent": 32.5,
+            "carbohydrateContent": "40",
+            "sodiumContent": None,
+        },
+    )
+
+    call = fetcher.last("PATCH", "/api/recipes/")
+    assert call["url"] == "/api/recipes/test-recipe"
+    assert call["json"] == {
+        "nutrition": {
+            "calories": "450",
+            "fatContent": "20",
+            "sodiumContent": None,
+            "proteinContent": "32.5",
+            "carbohydrateContent": "40",
+        },
+        "settings": {"public": True, "showNutrition": True},
+    }
+
+
+async def test_update_recipe_rejects_empty_or_unknown_nutrition(invoke, fetcher):
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    with pytest.raises(ToolError):
+        await invoke("update_recipe", slug="test-recipe", nutrition={})
+    with pytest.raises(ToolError):
+        await invoke("update_recipe", slug="test-recipe", nutrition={"protein": 30})
+    assert fetcher.last("PATCH", "/api/recipes/") is None
+
+
+async def test_update_recipe_nutrition_surfaces_client_failure(invoke, fetcher):
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("mealie down")
+
+    fetcher.patch_recipe = boom
+    with pytest.raises(ToolError):
+        await invoke("update_recipe", slug="test-recipe", nutrition={"calories": 1})
+
+
+async def test_create_recipe_nutrition_turns_on_display(invoke, fetcher):
+    await invoke(
+        "create_recipe",
+        name="Salad",
+        nutrition={"calories": 320, "proteinContent": 12, "fatContent": 18.5},
+    )
+    body = fetcher.last("PUT", "/api/recipes/")["json"]
+    assert body["nutrition"] == {
+        "calories": "320",
+        "proteinContent": "12",
+        "fatContent": "18.5",
+    }
+    assert body["settings"]["showNutrition"] is True
 
 
 @pytest.mark.parametrize("arguments", [{}, {"concise": False}])
@@ -256,6 +707,7 @@ async def test_update_recipe_combines_content_and_metadata(
         description="New description",
         nutrition={"calories": "200"},
         settings={"showAssets": False},
+        return_recipe=True,
         **arguments,
     )
     assert result["name"] == "Updated"
@@ -264,8 +716,11 @@ async def test_update_recipe_combines_content_and_metadata(
     assert result[unchanged] == original[unchanged]
     if not next(iter(arguments.values())):
         assert result[changed] == []
-    assert result["nutrition"] == {"calories": "200"}
-    assert result["settings"] == {**original["settings"], "showAssets": False}
+    # nutrition merges per field; supplying it also switches the card on
+    assert result["nutrition"] == {"calories": "200", "proteinContent": "20"}
+    assert result["settings"] == {
+        **original["settings"], "showAssets": False, "showNutrition": True,
+    }
     assert [r["method"] for r in fetcher.requests] == ["GET", "PUT"]
 
 
@@ -641,7 +1096,7 @@ async def test_import_fetch_failure_exposes_created_slug(invoke, fetcher, monkey
     "tool_name,arguments,method",
     [
         ("create_recipe", {"name": "Recipe"}, "PUT"),
-        ("update_recipe", {"slug": "test-recipe"}, "PATCH"),
+        ("update_recipe", {"slug": "test-recipe", "return_recipe": True}, "PATCH"),
     ],
 )
 async def test_authoring_accepts_fractional_servings(
@@ -724,7 +1179,7 @@ async def test_creation_none_leaves_content_unchanged_and_empty_lists_clear(
 
 
 @pytest.mark.parametrize("tool_name", ["create_recipe", "update_recipe"])
-async def test_settings_merge_preserves_unknown_keys_with_nutrition_replacement(
+async def test_settings_merge_preserves_unknown_keys_with_nutrition_merge(
     invoke, fetcher, tool_name
 ):
     fetcher.recipe["settings"] = {"locked": True, "futureToggle": True}
@@ -733,13 +1188,18 @@ async def test_settings_merge_preserves_unknown_keys_with_nutrition_replacement(
         {"name": "Recipe"} if tool_name == "create_recipe" else {"slug": "test-recipe"}
     )
     await invoke(
-        tool_name, **arguments, settings={"showAssets": False}, nutrition={}
+        tool_name,
+        **arguments,
+        settings={"showAssets": False, "showNutrition": False},
+        nutrition={"calories": 350, "proteinContent": None},
     )
     written = fetcher.last("PUT" if tool_name == "create_recipe" else "PATCH")["json"]
+    # an explicit showNutrition toggle wins over the nutrition default
     assert written["settings"] == {
         "locked": True, "futureToggle": True, "showAssets": False,
+        "showNutrition": False,
     }
-    assert written["nutrition"] == {}
+    assert written["nutrition"] == {"calories": "350", "proteinContent": None}
 
 
 def test_recipe_composition_is_pure_and_handles_nullable_settings():
@@ -798,3 +1258,109 @@ def test_recipe_api_upload_logs_exclude_filenames_and_identifiers(fetcher, caplo
     fetcher.upload_recipe_asset("private-slug", b"private-content", "private-file.pdf")
     for private in ("private-slug", "private-content", "private-file"):
         assert private not in caplog.text
+
+
+# --- compact update responses -------------------------------------------------
+
+
+async def test_update_recipe_returns_compact_summary_by_default(invoke, fetcher):
+    result = await invoke(
+        "update_recipe", slug="test-recipe", name="Renamed", servings=4
+    )
+
+    assert result == {
+        "success": True,
+        "slug": fetcher.recipe["slug"],
+        "name": "Renamed",
+        "updated_fields": ["name", "recipeServings"],
+    }
+
+
+async def test_update_recipe_summary_reports_slug_from_response(invoke, fetcher):
+    fetcher.responses["PATCH", "/api/recipes/old-slug"] = {
+        "slug": "new-slug",
+        "name": "New Name",
+    }
+
+    result = await invoke("update_recipe", slug="old-slug", name="New Name")
+
+    assert result["slug"] == "new-slug"
+
+
+async def test_update_recipe_content_summary_lists_content_fields(invoke, fetcher):
+    result = await invoke(
+        "update_recipe", slug="test-recipe", ingredients=["1 egg"], instructions=[]
+    )
+
+    assert fetcher.last("PUT", "/api/recipes/test-recipe") is not None
+    assert result["success"] is True
+    assert set(result["updated_fields"]) == {"recipeIngredient", "recipeInstructions"}
+    assert "recipeIngredient" not in result
+
+
+async def test_add_recipe_tags_returns_tag_names_by_default(invoke, fetcher):
+    result = await invoke("add_recipe_tags", slug="test-recipe", tags=["Healthy"])
+
+    assert result["success"] is True
+    assert result["updated_fields"] == ["tags"]
+    assert "Healthy" in result["tags"]
+    assert "recipeIngredient" not in result
+
+
+async def test_add_recipe_tags_can_return_full_recipe(invoke, fetcher):
+    result = await invoke(
+        "add_recipe_tags", slug="test-recipe", tags=["Healthy"], return_recipe=True
+    )
+
+    # the fake PATCH echoes its body, so the raw Mealie response comes back
+    assert result == fetcher.last("PATCH", "/api/recipes/test-recipe")["json"]
+
+
+async def test_categories_and_tags_summary_only_reports_changed_lists(invoke, fetcher):
+    fetcher.responses["PATCH", "/api/recipes/recipe"] = {
+        "slug": "recipe",
+        "name": "Recipe",
+        "recipeCategory": [{"id": "cat-1", "name": "Dinner"}],
+        "tags": [{"id": "tag-1", "name": "Quick"}],
+    }
+
+    result = await invoke(
+        "update_recipe_categories_and_tags", slug="recipe", category_ids=["cat-1"]
+    )
+
+    assert result == {
+        "success": True,
+        "slug": "recipe",
+        "name": "Recipe",
+        "updated_fields": ["recipeCategory"],
+        "recipeCategory": ["Dinner"],
+    }
+
+
+async def test_mark_recipe_last_made_returns_summary(invoke, fetcher):
+    fetcher.responses["PATCH", "/api/recipes/test-recipe/last-made"] = {
+        "slug": "test-recipe",
+        "name": "Test",
+        "recipeIngredient": [],
+    }
+
+    result = await invoke("mark_recipe_last_made", slug="test-recipe")
+
+    assert result == {
+        "success": True,
+        "slug": "test-recipe",
+        "name": "Test",
+        "updated_fields": ["lastMade"],
+    }
+    timestamp = fetcher.last("PATCH")["json"]["timestamp"]
+    assert timestamp.endswith("Z")
+    parsed = datetime.fromisoformat(timestamp)
+    assert parsed.utcoffset() == timedelta(0)
+    assert abs(datetime.now(UTC) - parsed) < timedelta(minutes=1)
+
+
+async def test_compact_summary_not_returned_on_failure(invoke, fetcher):
+    fetcher.fail_on("/api/recipes/test-recipe")
+
+    with pytest.raises(ToolError):
+        await invoke("update_recipe", slug="test-recipe", name="X")

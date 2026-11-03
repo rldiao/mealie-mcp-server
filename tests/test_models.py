@@ -8,6 +8,7 @@ from models.recipe import (
     OrganizerRef,
     Recipe,
     RecipeIngredientInput,
+    RecipeIngredientSubstitutionInput,
     RecipeInstructionInput,
     RecipeNutrition,
 )
@@ -95,6 +96,59 @@ def test_recipe_instruction_input_carries_summary():
 def test_organizer_ref_requires_id_and_name():
     org = OrganizerRef(id="t1", name="Quick")
     assert org.model_dump(exclude_none=True) == {"id": "t1", "name": "Quick"}
+
+
+def test_recipe_ingredient_input_accepts_substitutions():
+    ing = RecipeIngredientInput(
+        note="buttermilk",
+        substitutions=[
+            {"substituteFoodId": "a1000001-0000-4000-8000-000000000009"},
+            {"note": "milk with a squeeze of lemon"},
+        ],
+    )
+    assert ing.model_dump(exclude_none=True)["substitutions"] == [
+        {"substituteFoodId": "a1000001-0000-4000-8000-000000000009"},
+        {"note": "milk with a squeeze of lemon"},
+    ]
+
+
+def test_substitution_input_requires_food_or_note():
+    with pytest.raises(ValidationError):
+        RecipeIngredientSubstitutionInput()
+    with pytest.raises(ValidationError):
+        RecipeIngredientSubstitutionInput(note="   ")
+
+
+def test_recipe_round_trip_keeps_unmodelled_mealie_fields():
+    recipe = Recipe.model_validate(
+        {
+            **BASE_RECIPE,
+            "someFutureField": {"keep": True},
+            "recipeIngredient": [
+                {
+                    "note": "Cos",
+                    "referenceId": "a1000001-0000-4000-8000-000000000001",
+                    "substitutions": [
+                        {
+                            "substituteFoodId": "a1000001-0000-4000-8000-000000000002",
+                            "note": None,
+                            "substituteFood": {"id": "x", "name": "Romaine"},
+                        }
+                    ],
+                    "referencedRecipe": {"id": "r", "slug": "dressing"},
+                    "anotherNewField": 1,
+                }
+            ],
+        }
+    )
+    dumped = recipe.model_dump(exclude_none=True)
+    ing = dumped["recipeIngredient"][0]
+    assert dumped["someFutureField"] == {"keep": True}
+    assert ing["substitutions"][0]["substituteFoodId"] == (
+        "a1000001-0000-4000-8000-000000000002"
+    )
+    assert ing["referencedRecipe"] == {"id": "r", "slug": "dressing"}
+    assert ing["anotherNewField"] == 1
 
 
 def test_recipe_nutrition_coerces_numbers_to_strings():

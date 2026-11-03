@@ -19,19 +19,33 @@ Identifier = Annotated[str, AfterValidator(nonblank)]
 ISODate = Annotated[
     str, Field(pattern=r"^\d{4}-\d{2}-\d{2}$"), AfterValidator(iso_date)
 ]
-EntryType = Literal["breakfast", "lunch", "dinner", "side"]
+EntryType = Literal[
+    "breakfast", "lunch", "dinner", "side", "snack", "drink", "dessert"
+]
+RuleDay = Literal[
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+    "unset",
+]
+RuleEntryType = Literal[
+    "breakfast", "lunch", "dinner", "side", "snack", "drink", "dessert", "unset"
+]
+RecipeScale = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 
 
 class MealPlanEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     date: ISODate
+    end_date: Optional[ISODate] = None
     recipe_id: Optional[Identifier] = None
     title: Optional[str] = None
     entry_type: EntryType = "breakfast"
+    recipe_scale: Optional[RecipeScale] = None
 
     @model_validator(mode="after")
     def require_recipe_or_title(self) -> Self:
+        if self.end_date and self.end_date < self.date:
+            raise ValueError("End date must not precede date")
         if not self.recipe_id and not (self.title and self.title.strip()):
             raise ValueError("Either recipe_id or title must be provided")
         return self
@@ -41,17 +55,19 @@ class MealPlanUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     date: Optional[ISODate] = None
+    end_date: Optional[ISODate] = Field(default=None, alias="endDate")
     recipe_id: Optional[Identifier] = Field(default=None, alias="recipeId")
     title: Optional[str] = None
     entry_type: Optional[EntryType] = Field(default=None, alias="entryType")
+    recipe_scale: Optional[RecipeScale] = Field(default=None, alias="recipeScale")
 
     @model_validator(mode="after")
     def require_update(self) -> Self:
         if not self.model_fields_set:
             raise ValueError("At least one field must be provided to update")
-        for name in ("date", "title", "entry_type"):
+        for name in ("date", "title", "entry_type", "recipe_scale"):
             if name in self.model_fields_set and getattr(self, name) is None:
-                raise ValueError("Only recipe_id can be cleared with null")
+                raise ValueError("Only recipe_id and end_date can be cleared with null")
         return self
 
 
