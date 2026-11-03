@@ -3,7 +3,7 @@
   "info": {
     "title": "Mealie",
     "description": "\nMealie is a web application for managing your recipes, meal plans, and shopping lists. This is the Restful\nAPI interactive documentation that can be used to explore the API. If you're justing getting started with\nthe API and want to get started quickly, you can use the\n[API Usage | Mealie Docs](https://docs.mealie.io/documentation/getting-started/api-usage/)\nas a reference for how to get started.\n\n\nIf you have any questions or comments about mealie, please use the discord server to talk to the developers or other\ncommunity members. If you'd like to file an issue, please use the\n[GitHub Issue Tracker | Mealie](https://github.com/mealie-recipes/mealie/issues/new/choose)\n\n\n## Helpful Links\n- [Home Page](https://mealie.io)\n- [Documentation](https://docs.mealie.io)\n- [Discord](https://discord.gg/QuStdQGSGK)\n- [Demo](https://demo.mealie.io)\n",
-    "version": "v3.29.0"
+    "version": "v3.30.0"
   },
   "paths": {
     "/api/app/about": {
@@ -6083,6 +6083,56 @@
             }
           },
           {
+            "name": "lang",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lang"
+            }
+          },
+          {
+            "name": "duration",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1440,
+              "minimum": 1,
+              "default": 60,
+              "title": "Duration"
+            }
+          },
+          {
+            "name": "summary",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 500,
+              "default": "${type}: ${title}",
+              "title": "Summary"
+            }
+          },
+          {
+            "name": "description",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 500,
+              "default": "${note}\n\n${url}",
+              "title": "Description"
+            }
+          },
+          {
             "name": "breakfast",
             "in": "query",
             "required": false,
@@ -6281,6 +6331,16 @@
                 }
               ],
               "title": "End Date"
+            }
+          },
+          {
+            "name": "include_week_entries",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Week Entries"
             }
           },
           {
@@ -7313,6 +7373,199 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AIProviderSettingsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups/ai-providers/prompts": {
+      "get": {
+        "tags": [
+          "Groups: AI Prompts",
+          "Groups: AI Prompts"
+        ],
+        "summary": "Get Ai Prompts",
+        "operationId": "get_ai_prompts_api_groups_ai_providers_prompts_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "accept-language",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Accept-Language"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIPromptsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/groups/ai-providers/prompts/{prompt_name}": {
+      "put": {
+        "tags": [
+          "Groups: AI Prompts",
+          "Groups: AI Prompts"
+        ],
+        "summary": "Update Ai Prompt",
+        "description": "Append to or override a prompt. The group-wide instructions (`global`) can only be appended.",
+        "operationId": "update_ai_prompt_api_groups_ai_providers_prompts__prompt_name__put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "prompt_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Name"
+            }
+          },
+          {
+            "name": "accept-language",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Accept-Language"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIPromptOverrideUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIPromptsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Groups: AI Prompts",
+          "Groups: AI Prompts"
+        ],
+        "summary": "Delete Ai Prompt",
+        "description": "Reset a prompt to the default",
+        "operationId": "delete_ai_prompt_api_groups_ai_providers_prompts__prompt_name__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "prompt_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Name"
+            }
+          },
+          {
+            "name": "accept-language",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Accept-Language"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIPromptsOut"
                 }
               }
             }
@@ -9131,7 +9384,7 @@
           "Recipe: CRUD"
         ],
         "summary": "Create Recipe From Html Or Json",
-        "description": "Takes in raw HTML or a https://schema.org/Recipe object as a JSON string and parses it like a URL",
+        "description": "Takes in raw HTML or a https://schema.org/Recipe object as a JSON string and parses it like a URL.\n\nA complete recipe exported from Mealie (the JSON from an export zip, or the recipe as\nreturned by the API) is imported with its full structure instead of being parsed as\nschema.org.",
         "operationId": "create_recipe_from_html_or_json_api_recipes_create_html_or_json_post",
         "security": [
           {
@@ -9197,7 +9450,7 @@
           "Recipe: CRUD"
         ],
         "summary": "Create Recipe From Html Or Json Stream",
-        "description": "Takes in raw HTML or a https://schema.org/Recipe object as a JSON string and parses it like a URL,\nstreaming progress via SSE",
+        "description": "Takes in raw HTML or a https://schema.org/Recipe object as a JSON string and parses it like a URL,\nstreaming progress via SSE.\n\nA complete recipe exported from Mealie (the JSON from an export zip, or the recipe as\nreturned by the API) is imported with its full structure instead of being parsed as\nschema.org.",
         "operationId": "create_recipe_from_html_or_json_stream_api_recipes_create_html_or_json_stream_post",
         "security": [
           {
@@ -17864,6 +18117,226 @@
         }
       }
     },
+    "/api/admin/groups/{group_id}/ai-providers/prompts": {
+      "get": {
+        "tags": [
+          "Admin: AI Prompts"
+        ],
+        "summary": "Get Ai Prompts",
+        "operationId": "get_ai_prompts_api_admin_groups__group_id__ai_providers_prompts_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid4",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "accept-language",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Accept-Language"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIPromptsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/groups/{group_id}/ai-providers/prompts/{prompt_name}": {
+      "put": {
+        "tags": [
+          "Admin: AI Prompts"
+        ],
+        "summary": "Update Ai Prompt",
+        "description": "Append to or override a prompt. The group-wide instructions (`global`) can only be appended.",
+        "operationId": "update_ai_prompt_api_admin_groups__group_id__ai_providers_prompts__prompt_name__put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid4",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "prompt_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Name"
+            }
+          },
+          {
+            "name": "accept-language",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Accept-Language"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIPromptOverrideUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIPromptsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Admin: AI Prompts"
+        ],
+        "summary": "Delete Ai Prompt",
+        "description": "Reset a prompt to the default",
+        "operationId": "delete_ai_prompt_api_admin_groups__group_id__ai_providers_prompts__prompt_name__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid4",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "prompt_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Prompt Name"
+            }
+          },
+          {
+            "name": "accept-language",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Accept-Language"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIPromptsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/email": {
       "get": {
         "tags": [
@@ -21018,6 +21491,108 @@
   },
   "components": {
     "schemas": {
+      "AIPromptMode": {
+        "type": "string",
+        "enum": [
+          "append",
+          "override"
+        ],
+        "title": "AIPromptMode"
+      },
+      "AIPromptOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "isSystem": {
+            "type": "boolean",
+            "title": "Issystem"
+          },
+          "defaultContent": {
+            "type": "string",
+            "title": "Defaultcontent"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AIPromptMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "defaultChanged": {
+            "type": "boolean",
+            "title": "Defaultchanged",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "isSystem",
+          "defaultContent"
+        ],
+        "title": "AIPromptOut"
+      },
+      "AIPromptOverrideUpdate": {
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/AIPromptMode"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 20000,
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode",
+          "content"
+        ],
+        "title": "AIPromptOverrideUpdate"
+      },
+      "AIPromptsOut": {
+        "properties": {
+          "globalInstructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Globalinstructions"
+          },
+          "prompts": {
+            "items": {
+              "$ref": "#/components/schemas/AIPromptOut"
+            },
+            "type": "array",
+            "title": "Prompts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompts"
+        ],
+        "title": "AIPromptsOut"
+      },
       "AIProviderCreate": {
         "properties": {
           "name": {
@@ -22804,6 +23379,18 @@
             "format": "date",
             "title": "Date"
           },
+          "endDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enddate"
+          },
           "entryType": {
             "$ref": "#/components/schemas/PlanEntryType",
             "default": "breakfast"
@@ -22849,6 +23436,18 @@
             "type": "string",
             "format": "date",
             "title": "Date"
+          },
+          "endDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enddate"
           },
           "entryType": {
             "$ref": "#/components/schemas/PlanEntryType",
@@ -26608,7 +27207,8 @@
           "sunday",
           "unset"
         ],
-        "title": "PlanRulesDay"
+        "title": "PlanRulesDay",
+        "description": "The day a meal plan rule applies to, or the weekday of the meal plan entry rules are looked up for.\n\nOn a rule, `unset` means the rule applies to all days. When looking up rules for an entry, `unset`\nmeans the entry isn't on a specific weekday (e.g. it spans a week), so only rules that apply to all\ndays match it."
       },
       "PlanRulesOut": {
         "properties": {
@@ -27044,6 +27644,18 @@
             "format": "date",
             "title": "Date"
           },
+          "endDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enddate"
+          },
           "entryType": {
             "$ref": "#/components/schemas/PlanEntryType",
             "default": "breakfast"
@@ -27104,6 +27716,18 @@
                 "type": "null"
               }
             ]
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updatedat"
           }
         },
         "type": "object",
@@ -29193,6 +29817,19 @@
             "type": "array",
             "title": "Notereferences",
             "default": []
+          },
+          "durationSeconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2147483647.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Durationseconds"
           }
         },
         "type": "object",
@@ -32645,6 +33282,18 @@
             "type": "string",
             "format": "date",
             "title": "Date"
+          },
+          "endDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enddate"
           },
           "entryType": {
             "$ref": "#/components/schemas/PlanEntryType",
