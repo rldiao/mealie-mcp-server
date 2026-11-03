@@ -24,7 +24,7 @@ async def test_recipe_creation_tool_schema_is_consolidated(server):
     assert set(schema["properties"]) == {
         "name", "description", "org_url", "total_time", "prep_time", "cook_time",
         "perform_time", "recipe_yield", "servings", "image_url", "ingredients",
-        "instructions", "tags", "tools", "nutrition", "settings",
+        "instructions", "tags", "tools", "nutrition", "settings", "notes",
     }
 
 
@@ -798,3 +798,116 @@ def test_recipe_api_upload_logs_exclude_filenames_and_identifiers(fetcher, caplo
     fetcher.upload_recipe_asset("private-slug", b"private-content", "private-file.pdf")
     for private in ("private-slug", "private-content", "private-file"):
         assert private not in caplog.text
+
+
+# --- recipe notes ------------------------------------------------------------
+
+
+async def test_create_recipe_sets_notes_with_default_title(invoke, fetcher):
+    await invoke(
+        "create_recipe",
+        name="Noted",
+        notes=[{"title": "Storage", "text": "Keeps 4 days."}, {"text": "Bare tip."}],
+    )
+    body = fetcher.last("PUT", "/api/recipes/")["json"]
+    assert body["notes"] == [
+        {"title": "Storage", "text": "Keeps 4 days."},
+        {"title": "", "text": "Bare tip."},
+    ]
+
+
+async def test_update_recipe_notes_only_uses_patch(invoke, fetcher):
+    await invoke(
+        "update_recipe", slug="test-recipe", notes=[{"title": "T", "text": "Body"}]
+    )
+    assert [(r["method"], r["url"]) for r in fetcher.requests] == [
+        ("PATCH", "/api/recipes/test-recipe")
+    ]
+    assert fetcher.requests[0]["json"] == {"notes": [{"title": "T", "text": "Body"}]}
+
+
+async def test_update_recipe_empty_notes_clears(invoke, fetcher):
+    await invoke("update_recipe", slug="test-recipe", notes=[])
+    assert fetcher.last("PATCH", "/api/recipes/")["json"] == {"notes": []}
+
+
+async def test_update_recipe_notes_with_content_preserves_other_fields(
+    invoke, fetcher
+):
+    fetcher.recipe["recipeInstructions"] = [{"text": "Original"}]
+    fetcher.recipe["notes"] = [{"title": "Old", "text": "Old note"}]
+    result = await invoke(
+        "update_recipe",
+        slug="test-recipe",
+        ingredients=["1 onion"],
+        notes=[{"text": "New note"}],
+    )
+    assert [r["method"] for r in fetcher.requests] == ["GET", "PUT"]
+    assert result["notes"] == [{"title": "", "text": "New note"}]
+    assert result["recipeInstructions"] == [{"text": "Original"}]
+
+
+async def test_update_recipe_omitting_notes_leaves_them_alone(invoke, fetcher):
+    await invoke("update_recipe", slug="test-recipe", name="Renamed")
+    assert "notes" not in fetcher.last("PATCH", "/api/recipes/")["json"]
+
+
+@pytest.mark.parametrize(
+    "notes", [[{"title": "T"}], [{"text": "   "}], [{"text": None}], ["plain"]]
+)
+async def test_update_recipe_rejects_invalid_notes(invoke, fetcher, notes):
+    with pytest.raises(ToolError):
+        await invoke("update_recipe", slug="test-recipe", notes=notes)
+    assert fetcher.requests == []
+
+
+async def test_add_recipe_note_appends_to_existing(invoke, fetcher):
+    fetcher.recipe["notes"] = [{"title": "Existing", "text": "Keep me"}]
+    result = await invoke(
+        "add_recipe_note", slug="test-recipe", title="Storage", text="Freezes well."
+    )
+    assert [(r["method"], r["url"]) for r in fetcher.requests] == [
+        ("GET", "/api/recipes/test-recipe"),
+        ("PATCH", "/api/recipes/test-recipe"),
+    ]
+    assert fetcher.requests[1]["json"] == {
+        "notes": [
+            {"title": "Existing", "text": "Keep me"},
+            {"title": "Storage", "text": "Freezes well."},
+        ]
+    }
+    assert result["notes"][-1] == {"title": "Storage", "text": "Freezes well."}
+
+
+@pytest.mark.parametrize("existing", [None, []])
+async def test_add_recipe_note_without_existing_notes(invoke, fetcher, existing):
+    fetcher.recipe["notes"] = existing
+    await invoke("add_recipe_note", slug="test-recipe", text="First")
+    assert fetcher.last("PATCH", "/api/recipes/")["json"] == {
+        "notes": [{"title": "", "text": "First"}]
+    }
+
+
+@pytest.mark.parametrize(
+    "arguments", [{"slug": "test-recipe", "text": "  "}, {"slug": " ", "text": "x"}]
+)
+async def test_add_recipe_note_validates_before_requests(invoke, fetcher, arguments):
+    with pytest.raises(ToolError, match="Error adding recipe note"):
+        await invoke("add_recipe_note", **arguments)
+    assert fetcher.requests == []
+
+
+async def test_add_recipe_note_surfaces_fetch_failure(invoke, fetcher):
+    fetcher.fail_on("/api/recipes/test-recipe", 500)
+    with pytest.raises(ToolError, match="Error adding recipe note"):
+        await invoke("add_recipe_note", slug="test-recipe", text="x")
+    assert [r["method"] for r in fetcher.requests] == ["GET"]
+
+
+async def test_add_recipe_note_surfaces_write_failure(invoke, fetcher, monkeypatch):
+    def reject(slug, data):
+        raise MealieApiError(422, "Mealie rejected it")
+
+    monkeypatch.setattr(fetcher, "patch_recipe", reject)
+    with pytest.raises(ToolError, match="HTTP 422"):
+        await invoke("add_recipe_note", slug="test-recipe", text="x")
