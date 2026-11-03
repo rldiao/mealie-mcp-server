@@ -152,6 +152,19 @@ class RecipeSettings(BaseModel):
     locked: bool = False
 
 
+class RecipeNote(BaseModel):
+    """A free-form note shown under a recipe (tips, substitutions, storage).
+
+    Mealie requires a title on every note but accepts an empty one, so the
+    title defaults to "" for bare notes.
+    """
+
+    title: str = Field(
+        default="", description='Optional heading, e.g. "Storage". May be empty.'
+    )
+    text: str = Field(description="The note body. Markdown is rendered by Mealie.")
+
+
 class RecipeCategory(BaseModel):
     id: Optional[str] = None
     name: Optional[str] = None

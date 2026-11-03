@@ -17,6 +17,7 @@ from models.recipe import (
     RecipeIngredientInput,
     RecipeInstruction,
     RecipeInstructionInput,
+    RecipeNote,
     RecipeNutrition,
     RecipeSettingsInput,
 )
@@ -112,6 +113,12 @@ def _require_text(value: str, label: str) -> None:
         raise ValueError(f"{label} cannot be empty")
 
 
+def _note_payload(note: RecipeNote) -> Dict[str, str]:
+    """Serialize a note, rejecting an empty body before any request."""
+    _require_text(note.text, "Note text")
+    return {"title": note.title, "text": note.text}
+
+
 def _recipe_changes(
     *,
     ingredients: Optional[List[Union[str, RecipeIngredientInput]]] = None,
@@ -120,6 +127,7 @@ def _recipe_changes(
     tools: Optional[List[OrganizerRef]] = None,
     nutrition: Optional[RecipeNutrition] = None,
     settings: Optional[RecipeSettingsInput] = None,
+    notes: Optional[List[RecipeNote]] = None,
     **fields: Any,
 ) -> Dict[str, Any]:
     """Validate and serialize caller content before any creation request."""
@@ -160,6 +168,8 @@ def _recipe_changes(
         changes["nutrition"] = nutrition.model_dump(exclude_none=True)
     if settings is not None:
         changes["settings"] = settings.model_dump(exclude_none=True)
+    if notes is not None:
+        changes["notes"] = [_note_payload(n) for n in notes]
     return changes
 
 
@@ -356,6 +366,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         tools: Optional[List[OrganizerRef]] = None,
         nutrition: Optional[RecipeNutrition] = None,
         settings: Optional[RecipeSettingsInput] = None,
+        notes: Optional[List[RecipeNote]] = None,
     ) -> Dict[str, Any]:
         """Create a recipe and populate all of its content in one call.
 
@@ -398,6 +409,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 toggles you pass are changed; the rest keep the defaults Mealie
                 seeds from the household preferences. Set showAssets here when
                 you know you are about to attach a file.
+            notes: Recipe notes (tips, substitutions, storage advice), each a
+                text with an optional title.
 
         Returns:
             Dict[str, Any]: The created recipe details.
@@ -421,6 +434,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 tools=tools,
                 nutrition=nutrition,
                 settings=settings,
+                notes=notes,
             )
             return _create_populated_recipe(mealie, name, changes, image_url)
 
@@ -442,6 +456,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         settings: Optional[RecipeSettingsInput] = None,
         ingredients: Optional[List[Union[str, RecipeIngredientInput]]] = None,
         instructions: Optional[List[Union[str, RecipeInstructionInput]]] = None,
+        notes: Optional[List[RecipeNote]] = None,
     ) -> Dict[str, Any]:
         """Partially update a recipe (only updates provided fields).
 
@@ -476,6 +491,10 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 create_recipe. Replaces the ingredient list when provided.
             instructions: Step strings and/or structured objects, as in
                 create_recipe. Replaces the instruction list when provided.
+            notes: Recipe notes, each a text with an optional title. Replaces
+                the whole note list when provided (an empty list clears it), so
+                include the existing notes you want to keep; read them with
+                get_recipe. To append a single note, use add_recipe_note.
 
         Returns:
             Dict[str, Any]: The updated recipe details.
@@ -497,6 +516,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 settings=settings,
                 ingredients=ingredients,
                 instructions=instructions,
+                notes=notes,
             )
             if not recipe_data:
                 raise ValueError("At least one field must be provided to update")
@@ -515,6 +535,28 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 }
 
             return mealie.patch_recipe(slug, recipe_data)
+
+    @mcp.tool()
+    def add_recipe_note(slug: str, text: str, title: str = "") -> Dict[str, Any]:
+        """Append one note to a recipe, keeping its existing notes.
+
+        Use for adding a tip, substitution, or storage advice without having to
+        resend the other notes. To edit, reorder, or delete notes, pass the
+        complete list to update_recipe instead.
+
+        Args:
+            slug: The unique text identifier for the recipe.
+            text: The note body. Markdown is rendered by Mealie.
+            title: Optional heading for the note, e.g. "Storage".
+
+        Returns:
+            Dict[str, Any]: The updated recipe details.
+        """
+        with tool_error_boundary("Error adding recipe note"):
+            _require_text(slug, "Recipe slug")
+            note = _note_payload(RecipeNote(title=title, text=text))
+            current = mealie.get_recipe(slug).get("notes") or []
+            return mealie.patch_recipe(slug, {"notes": [*current, note]})
 
     @mcp.tool()
     def duplicate_recipe(slug: str, name: Optional[str] = None) -> Dict[str, Any]:
