@@ -607,8 +607,9 @@ See Mealie's [security settings](https://docs.mealie.io/documentation/getting-st
 ### Newer Mealie Fields
 
 Structured recipe times, `recipe_scale` on meal plans, food substitutions,
-note-to-step links, organizer merges, and the iCal feed need the Mealie version
-that introduced them (3.25 to 3.29). On older servers, the tools that call a
+note-to-step links, organizer merges, the iCal feed, week-long meal plan
+entries (`end_date`), and step durations (`durationSeconds`) need the Mealie
+version that introduced them (3.25 to 3.30). On older servers, the tools that call a
 new endpoint fail with an HTTP error, and new fields may be ignored.
 
 ## Support and Contributing

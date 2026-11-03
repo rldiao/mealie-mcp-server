@@ -132,6 +132,63 @@ async def test_mealplan_recipe_scale_is_sent_when_given(invoke, fetcher):
     assert fetcher.last()["json"]["recipeScale"] == 0.5
 
 
+async def test_mealplan_week_entries_filter_and_end_date_are_sent(invoke, fetcher):
+    await invoke("get_all_mealplans", include_week_entries=True)
+    assert fetcher.last()["params"] == {"include_week_entries": True}
+    await invoke(
+        "create_mealplan", date="2026-10-05", end_date="2026-10-11", title="Chili"
+    )
+    assert fetcher.last()["json"] == {
+        "date": "2026-10-05",
+        "endDate": "2026-10-11",
+        "entryType": "breakfast",
+        "title": "Chili",
+    }
+    await invoke(
+        "create_mealplan_bulk",
+        entries=[{"date": "2026-10-05", "end_date": "2026-10-11", "title": "Soup"}],
+    )
+    assert fetcher.last()["json"]["endDate"] == "2026-10-11"
+
+
+@pytest.mark.parametrize("end_date", ["2026-09-30", "2026-02-30", "20261011"])
+async def test_invalid_mealplan_end_dates_make_no_requests(invoke, fetcher, end_date):
+    with pytest.raises(ToolError):
+        await invoke("create_mealplan", date="2026-10-01", end_date=end_date, title="x")
+    with pytest.raises(ToolError):
+        await invoke(
+            "create_mealplan_bulk",
+            entries=[{"date": "2026-10-01", "end_date": end_date, "title": "x"}],
+        )
+    assert fetcher.requests == []
+
+
+async def test_mealplan_update_sets_and_clears_end_date(invoke, fetcher):
+    await invoke("update_mealplan", entry_id="meal-1", end_date="2026-10-07")
+    assert fetcher.last()["json"] == {**CURRENT_MEAL, "endDate": "2026-10-07"}
+    fetcher.responses[("GET", f"{MEALPLANS}/meal-1")] = {
+        **CURRENT_MEAL,
+        "endDate": "2026-10-07",
+    }
+    await invoke("update_mealplan", entry_id="meal-1", title="Renamed")
+    assert fetcher.last()["json"]["endDate"] == "2026-10-07"
+    await invoke("update_mealplan", entry_id="meal-1", clear_end_date=True)
+    assert fetcher.last()["json"]["endDate"] is None
+
+
+async def test_mealplan_update_rejects_end_date_before_date(invoke, fetcher):
+    with pytest.raises(ToolError):
+        await invoke("update_mealplan", entry_id="meal-1", end_date="2026-09-01")
+    with pytest.raises(ToolError):
+        await invoke(
+            "update_mealplan",
+            entry_id="meal-1",
+            end_date="2026-10-07",
+            clear_end_date=True,
+        )
+    assert [request["method"] for request in fetcher.requests] == ["GET"]
+
+
 async def test_mealplan_update_sets_recipe_scale_and_keeps_fields(invoke, fetcher):
     await invoke("update_mealplan", entry_id="meal-1", recipe_scale=1.5)
     assert fetcher.last()["json"] == {**CURRENT_MEAL, "recipeScale": 1.5}

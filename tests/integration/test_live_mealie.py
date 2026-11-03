@@ -72,6 +72,40 @@ async def test_mealplan_recipe_scale(invoke, recipe, mealplan_entry):
     assert updated["recipeId"] == stored["id"]
 
 
+# --- week-long meal plan entries and step durations (Mealie 3.30) ------------
+
+
+async def test_week_long_mealplan_entry_needs_include_week_entries(
+    invoke, mealplan_entry
+):
+    entry = await mealplan_entry(
+        date="2030-03-04", end_date="2030-03-10", title="Cook sometime this week"
+    )
+    assert entry["endDate"] == "2030-03-10"
+
+    window = {"start_date": "2030-03-04", "end_date": "2030-03-10"}
+    default = await invoke("get_all_mealplans", **window)
+    assert entry["id"] not in [item["id"] for item in default["items"]]
+    included = await invoke("get_all_mealplans", **window, include_week_entries=True)
+    assert entry["id"] in [item["id"] for item in included["items"]]
+
+    renamed = await invoke("update_mealplan", entry_id=entry["id"], title="Renamed")
+    assert renamed["endDate"] == "2030-03-10"
+    cleared = await invoke("update_mealplan", entry_id=entry["id"], clear_end_date=True)
+    assert cleared["endDate"] is None
+
+
+async def test_recipe_step_duration_round_trip(invoke, recipe):
+    created = await recipe(
+        "Timed",
+        instructions=["Mix.", {"text": "Rest the dough.", "durationSeconds": 600}],
+    )
+    stored = await invoke("get_recipe", slug=created["slug"])
+    steps = stored["recipeInstructions"]
+    assert steps[0]["durationSeconds"] is None
+    assert steps[1]["durationSeconds"] == 600
+
+
 # --- organizer merge and unused lookups -------------------------------------
 
 

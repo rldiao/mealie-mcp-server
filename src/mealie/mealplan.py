@@ -103,6 +103,7 @@ class MealplanMixin:
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        include_week_entries: Optional[bool] = None,
         page: Optional[int] = None,
         per_page: Optional[int] = None,
     ) -> Dict[str, Any]:
@@ -111,6 +112,8 @@ class MealplanMixin:
         Args:
             start_date: Start date for filtering meal plans (ISO format YYYY-MM-DD)
             end_date: End date for filtering meal plans (ISO format YYYY-MM-DD)
+            include_week_entries: Also return entries that span a week
+                (Mealie 3.30+); Mealie leaves them out by default
             page: Page number to retrieve
             per_page: Number of items per page
 
@@ -124,6 +127,7 @@ class MealplanMixin:
         param_dict = {
             "start_date": dates.start_date,
             "end_date": dates.end_date,
+            "include_week_entries": include_week_entries,
             "page": page,
             "perPage": per_page,
         }
@@ -143,6 +147,7 @@ class MealplanMixin:
         title: Optional[str] = None,
         entry_type: str = "breakfast",
         recipe_scale: Optional[float] = None,
+        end_date: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create a new mealplan entry.
 
@@ -152,6 +157,7 @@ class MealplanMixin:
             title: Title for the mealplan entry if not using a recipe (optional)
             entry_type: Meal type (breakfast, lunch, dinner, side, snack, drink, dessert)
             recipe_scale: Serving multiplier for the recipe (Mealie defaults to 1)
+            end_date: Last day of a multi-day or week-long entry (Mealie 3.30+)
 
         Returns:
             JSON response containing the created mealplan entry
@@ -166,6 +172,7 @@ class MealplanMixin:
             title=title,
             entry_type=entry_type,
             recipe_scale=recipe_scale,
+            end_date=end_date,
         )
 
         # Build the request payload
@@ -180,6 +187,8 @@ class MealplanMixin:
             payload["title"] = entry.title
         if entry.recipe_scale is not None:
             payload["recipeScale"] = entry.recipe_scale
+        if entry.end_date:
+            payload["endDate"] = entry.end_date
 
         logger.info({"message": "Creating mealplan entry"})
         return self._handle_request("POST", "/api/households/mealplans", json=payload)
@@ -205,6 +214,7 @@ class MealplanMixin:
             recipe_id=merged_data.get("recipeId"),
             title=merged_data.get("title"),
             entry_type=merged_data.get("entryType", "breakfast"),
+            end_date=merged_data.get("endDate"),
         )
         return self._handle_request(
             "PUT", f"/api/households/mealplans/{entry_id}", json=merged_data

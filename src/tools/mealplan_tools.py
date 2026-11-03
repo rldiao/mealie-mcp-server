@@ -18,6 +18,7 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
     def get_all_mealplans(
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        include_week_entries: Optional[bool] = None,
         page: Optional[int] = None,
         per_page: Optional[int] = None,
     ) -> Dict[str, Any]:
@@ -26,6 +27,8 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Args:
             start_date: Start date for filtering meal plans (ISO format YYYY-MM-DD)
             end_date: End date for filtering meal plans (ISO format YYYY-MM-DD)
+            include_week_entries: Also return entries that span a whole week
+                (Mealie 3.30+); Mealie leaves them out by default
             page: Page number to retrieve
             per_page: Number of items per page
 
@@ -36,6 +39,7 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             return mealie.get_mealplans(
                 start_date=start_date,
                 end_date=end_date,
+                include_week_entries=include_week_entries,
                 page=page,
                 per_page=per_page,
             )
@@ -47,6 +51,7 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         title: Optional[str] = None,
         entry_type: EntryType = "breakfast",
         recipe_scale: Optional[float] = None,
+        end_date: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create a new meal plan entry.
 
@@ -58,6 +63,9 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 drink, or dessert)
             recipe_scale: Serving multiplier for the recipe, e.g. 2 to cook a
                 double batch (optional; Mealie defaults to 1)
+            end_date: Last day (YYYY-MM-DD) when the entry covers a span such
+                as a whole week, for something you will cook sometime that
+                week (optional; Mealie 3.30+)
 
         Returns:
             Dict[str, Any]: JSON response containing the created mealplan entry
@@ -69,6 +77,7 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 title=title,
                 entry_type=entry_type,
                 recipe_scale=recipe_scale,
+                end_date=end_date,
             )
 
     @mcp.tool()
@@ -88,6 +97,8 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 - entry_type (str, optional): Meal type (breakfast, lunch, dinner,
                   side, snack, drink, or dessert)
                 - recipe_scale (float, optional): Serving multiplier for the recipe
+                - end_date (str, optional): Last day (YYYY-MM-DD) of a span such
+                  as a whole week (Mealie 3.30+)
 
         Returns:
             Dict[str, Any]: JSON response with success message
@@ -118,16 +129,22 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         entry_type: Optional[EntryType] = None,
         recipe_scale: Optional[float] = None,
         clear_recipe: bool = False,
+        end_date: Optional[str] = None,
+        clear_end_date: bool = False,
     ) -> Dict[str, Any]:
         """Update selected fields; clear_recipe removes the linked recipe.
 
         Omitted or null arguments leave fields unchanged. clear_recipe cannot
         be combined with a replacement recipe_id. recipe_scale is the serving
-        multiplier for the recipe, e.g. 2 for a double batch.
+        multiplier for the recipe, e.g. 2 for a double batch. end_date makes
+        the entry span up to that day (Mealie 3.30+); clear_end_date turns it
+        back into a single-day entry and cannot be combined with end_date.
         """
         with tool_error_boundary("Error updating mealplan entry"):
             if clear_recipe and recipe_id is not None:
                 raise ValueError("Cannot clear and replace a recipe in one update")
+            if clear_end_date and end_date is not None:
+                raise ValueError("Cannot clear and replace an end date in one update")
             entry_data = {}
             if date is not None:
                 entry_data["date"] = date
@@ -141,6 +158,10 @@ def register_mealplan_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 entry_data["entryType"] = entry_type
             if recipe_scale is not None:
                 entry_data["recipeScale"] = recipe_scale
+            if end_date is not None:
+                entry_data["endDate"] = end_date
+            if clear_end_date:
+                entry_data["endDate"] = None
             if not entry_data:
                 raise ValueError("At least one field must be provided to update")
             return mealie.update_mealplan(entry_id, entry_data)

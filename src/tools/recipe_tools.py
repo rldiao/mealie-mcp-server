@@ -490,7 +490,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
           also carry a summary (heading shown in place of "Step N"), a title
           (section banner above the step), ingredientReferences for
           cook-mode highlights, and noteReferences to show a recipe note on
-          that step (match the referenceId given to the note).
+          that step (match the referenceId given to the note), and
+          durationSeconds for how long the step takes (Mealie 3.30+).
 
         Args:
             name: The name of the new recipe.

@@ -72,6 +72,7 @@ class RecipeInstruction(MealieResponseModel):
     text: str
     ingredientReferences: List[IngredientReference] = Field(default_factory=list)
     noteReferences: Optional[List[NoteReference]] = None
+    durationSeconds: Optional[int] = None
 
 
 class RecipeNutrition(MealieResponseModel):
@@ -424,6 +425,15 @@ class RecipeInstructionInput(BaseModel):
         description=(
             "referenceIds of recipe notes to show on this step; must match the "
             "referenceId set on those notes (Mealie 3.26+)."
+        ),
+    )
+    durationSeconds: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=2147483647,
+        description=(
+            "How long this step takes, in seconds, e.g. 600 for 10 minutes "
+            "(Mealie 3.30+)."
         ),
     )
 

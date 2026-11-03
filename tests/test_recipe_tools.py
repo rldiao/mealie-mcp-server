@@ -562,6 +562,30 @@ async def test_create_recipe_links_notes_to_steps(invoke, fetcher):
     assert "noteReferences" not in steps[0]
 
 
+async def test_create_recipe_sends_step_durations(invoke, fetcher):
+    await invoke(
+        "create_recipe",
+        name="Timed",
+        instructions=["Mix.", {"text": "Rest.", "durationSeconds": 600}],
+    )
+    steps = fetcher.last("PUT", "/api/recipes/")["json"]["recipeInstructions"]
+    assert steps[1]["durationSeconds"] == 600
+    assert "durationSeconds" not in steps[0]
+
+
+@pytest.mark.parametrize("seconds", [0, -5])
+async def test_create_recipe_rejects_non_positive_step_duration(
+    invoke, fetcher, seconds
+):
+    with pytest.raises(ToolError):
+        await invoke(
+            "create_recipe",
+            name="Timed",
+            instructions=[{"text": "Rest.", "durationSeconds": seconds}],
+        )
+    assert fetcher.requests == []
+
+
 async def test_update_recipe_keeps_note_reference_ids(invoke, fetcher):
     v4 = "b2000002-0000-4000-8000-000000000002"
     await invoke(

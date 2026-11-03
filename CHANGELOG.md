@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- Mealie 3.30 support:
+  - `create_mealplan`, `create_mealplan_bulk`, and `update_mealplan` take
+    `end_date` for entries that span a week; `update_mealplan` also takes
+    `clear_end_date`.
+  - `get_all_mealplans` takes `include_week_entries`. Mealie leaves week-long
+    entries out of the list unless it is set.
+  - Recipe instruction steps accept `durationSeconds`.
+
+### Changed
+
+- Refreshed `openapi.json` to the Mealie v3.30.0 spec.
+
 ## 0.2.0 - 2026-10-18
 
 ### Changed
