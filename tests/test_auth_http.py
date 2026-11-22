@@ -174,7 +174,7 @@ async def test_other_user_cannot_use_session(http_app):
 
 async def test_auth_logs_contain_no_tokens(http_app, caplog):
     with caplog.at_level(logging.DEBUG):
-        async with http_app() as app:
+        async with http_app(LOG_LEVEL="DEBUG") as app:
             rejected, accepted = app.oidc.token(aud="other"), app.oidc.token()
             await app.client.post(
                 "/mcp", json=INITIALIZE, headers={"Authorization": f"Bearer {rejected}"}
@@ -205,6 +205,21 @@ async def test_refreshed_token_keeps_session_and_identity(http_app):
             app.client, headers, "get_recipes", token=app.oidc.token(jti="second")
         )
         assert status == 200 and "alice recipe" in json.dumps(result)
+
+
+async def test_refreshed_token_uses_current_request_identity(http_app):
+    async with http_app(**RP) as app:
+        headers = await initialize(app.client, app.oidc.token())
+        # Same sub keeps the SDK session; only the current request names bob.
+        status, result = await call_tool(
+            app.client,
+            headers,
+            "get_recipes",
+            token=app.oidc.token(preferred_username="bob"),
+        )
+        assert status == 200 and "bob recipe" in json.dumps(result)
+        recipes = [r for r in app.mealie.requests if r.url.path == "/api/recipes"]
+        assert recipes and app.mealie.user_of(recipes[-1]) == "bob"
 
 
 async def test_unknown_mealie_account_gets_readable_tool_error(http_app):
@@ -250,7 +265,7 @@ async def test_reverse_proxy_checks_health_once_and_closes_clients(http_app):
 async def test_reverse_proxy_logs_contain_no_identity_or_secret(http_app, caplog):
     issued_oidc_tokens = []
     with caplog.at_level(logging.DEBUG):
-        async with http_app(**RP) as app:
+        async with http_app(LOG_LEVEL="DEBUG", **RP) as app:
             alice_token = app.oidc.token()
             carol_token = app.oidc.token(sub="sub-carol", preferred_username="carol")
             issued_oidc_tokens += [alice_token, carol_token]
