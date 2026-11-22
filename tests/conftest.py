@@ -400,6 +400,16 @@ class FakeMealie:
     API_KEY = "api-key-marker"
 
     def __init__(self):
+        self.secret = "proxy-secret-marker"
+        self.user_header = "X-Forwarded-User"
+        self.secret_header = "X-Mealie-Reverse-Proxy-Secret"
+        self.accounts = {"alice", "bob"}
+        self.expires_in = 172800
+        self.exchange_status: int | None = None
+        self.exchanges: list[httpx.Request] = []
+        self.issued: dict[str, str] = {}
+        self.rejected: set[str] = set()
+        self._counter = 0
         self.health_status = 200
         self.requests: list[httpx.Request] = []
         self.clients: list[httpx.Client] = []
@@ -407,6 +417,7 @@ class FakeMealie:
         self.routes = {
             ("GET", "/api/app/about"): self._about,
             ("GET", "/api/recipes"): self._recipes,
+            ("GET", "/api/auth/reverse-proxy"): self._exchange,
         }
         self.transport = httpx.MockTransport(self._handle)
 
@@ -422,12 +433,51 @@ class FakeMealie:
 
         monkeypatch.setattr(httpx, "Client", RecordingClient)
 
+    @staticmethod
+    def _bearer(request):
+        scheme, _, credentials = request.headers.get("authorization", "").partition(" ")
+        return credentials if scheme.lower() == "bearer" else None
+
     def user(self, request):
         """The Mealie user a request authenticates as, or None."""
-        scheme, _, credentials = request.headers.get("authorization", "").partition(" ")
-        if scheme.lower() != "bearer":
-            return None
-        return self.tokens.get(credentials)
+        user = self.tokens.get(self._bearer(request))
+        return None if user in self.rejected else user
+
+    def user_of(self, request):
+        """The owner of the bearer token, even if it was revoked or rejected."""
+        token = self._bearer(request)
+        return self.issued.get(token) or self.tokens.get(token)
+
+    def revoke(self, user):
+        """Invalidate the tokens already issued to `user`."""
+        for token, owner in list(self.tokens.items()):
+            if owner == user and token != self.API_KEY:
+                del self.tokens[token]
+
+    def reject_all(self, user):
+        """Make `/api/recipes` refuse every token of `user`, future ones included."""
+        self.rejected.add(user)
+
+    def _exchange(self, request):
+        self.exchanges.append(request)
+        if self.exchange_status is not None:
+            return httpx.Response(self.exchange_status)
+        user = request.headers.get(self.user_header)
+        if request.headers.get(self.secret_header) != self.secret or user not in self.accounts:
+            return httpx.Response(401, json={"detail": "Unauthorized"})
+        self._counter += 1
+        token = f"mealie-{user}-{self._counter}"
+        self.tokens[token] = user
+        self.issued[token] = user
+        return httpx.Response(
+            200,
+            json={
+                "access_token": token,
+                "token_type": "bearer",
+                "expires_in": self.expires_in,
+            },
+            headers={"Set-Cookie": f"mealie.access_token={token}; Path=/"},
+        )
 
     def _handle(self, request):
         self.requests.append(request)

@@ -209,3 +209,20 @@ def test_ai_import_wire_encoding_and_timeout(make_client, monkeypatch, with_imag
         assert parse_qs(request.content.decode()) == {key: [value] for key, value in expected.items()}
     client.get_recipes()
     assert requests[-1].extensions["timeout"]["read"] == 30.0
+
+
+def test_client_can_skip_health_check(monkeypatch):
+    recorded = []
+
+    def respond(request):
+        recorded.append(request)
+        return httpx.Response(200, json={})
+
+    original = httpx.Client
+    monkeypatch.setattr(
+        "mealie.client.httpx.Client",
+        lambda **kwargs: original(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    client = MealieClient("http://mealie.invalid", "token", check_health=False)
+    assert recorded == []
+    client.close()
