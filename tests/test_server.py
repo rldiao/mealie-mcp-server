@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import runpy
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -11,12 +12,32 @@ import anyio
 import httpx
 import pytest
 
+from mcp_auth import AuthConfig
+
+AUTH_VARIABLES = (
+    "MCP_AUTH_ISSUER",
+    "MCP_AUTH_AUDIENCE",
+    "MCP_AUTH_REQUIRED_GROUP",
+    "MCP_AUTH_USERNAME_CLAIM",
+    "MCP_PUBLIC_URL",
+    "MEALIE_AUTH_MODE",
+    "MEALIE_REVERSE_PROXY_SECRET",
+    "MEALIE_REVERSE_PROXY_USER_HEADER",
+    "MEALIE_REVERSE_PROXY_SECRET_HEADER",
+)
+AUTH_ENV = {
+    "MCP_TRANSPORT": "streamable-http",
+    "MCP_AUTH_ISSUER": "https://auth.example/o/app/",
+    "MCP_AUTH_AUDIENCE": "client",
+    "MCP_PUBLIC_URL": "https://mcp.example",
+}
+
 
 @pytest.fixture
 def load_server(monkeypatch, request):
     monkeypatch.setenv("MEALIE_BASE_URL", "http://mealie.invalid")
     monkeypatch.setenv("MEALIE_API_KEY", "test-placeholder")
-    for name in ("MCP_TRANSPORT", "MCP_HOST", "MCP_PORT", "MEALIE_ENABLE_AI_IMPORT"):
+    for name in ("MCP_TRANSPORT", "MCP_HOST", "MCP_PORT", "MEALIE_ENABLE_AI_IMPORT", *AUTH_VARIABLES):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr("dotenv.load_dotenv", lambda: None)
 
@@ -371,3 +392,67 @@ def test_sdk_advertises_rfc9728_resource_metadata_path():
 
     url = build_resource_metadata_url(AnyHttpUrl("https://mcp.example/mcp"))
     assert str(url) == "https://mcp.example/.well-known/oauth-protected-resource/mcp"
+
+
+@pytest.mark.parametrize(
+    ("env", "message"),
+    [
+        ({**AUTH_ENV, "MCP_AUTH_AUDIENCE": ""}, "MCP_AUTH_AUDIENCE"),
+        ({**AUTH_ENV, "MCP_PUBLIC_URL": ""}, "MCP_PUBLIC_URL"),
+        ({**AUTH_ENV, "MCP_PUBLIC_URL": "https://mcp.example/mcp"}, "MCP_PUBLIC_URL"),
+        ({**AUTH_ENV, "MCP_PUBLIC_URL": "mcp.example"}, "MCP_PUBLIC_URL"),
+        ({**AUTH_ENV, "MCP_AUTH_ISSUER": "not-a-url"}, "MCP_AUTH_ISSUER"),
+        ({**AUTH_ENV, "MCP_AUTH_USERNAME_CLAIM": " "}, "MCP_AUTH_USERNAME_CLAIM"),
+        ({**AUTH_ENV, "MCP_TRANSPORT": "stdio"}, "MCP_TRANSPORT"),
+        ({**AUTH_ENV, "MCP_TRANSPORT": "sse"}, "MCP_TRANSPORT"),
+        ({"MCP_AUTH_AUDIENCE": "client"}, "MCP_AUTH_ISSUER"),
+        ({"MCP_PUBLIC_URL": "https://mcp.example"}, "MCP_AUTH_ISSUER"),
+    ],
+)
+def test_invalid_auth_configuration_fails_before_http_allocation(load_server, monkeypatch, env, message):
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    server, _, requests, factory = load_server()
+    with pytest.raises(ValueError, match=message) as error:
+        server["main"]()
+    assert "auth.example" not in str(error.value) and "mcp.example" not in str(error.value)
+    assert requests == []
+    factory.assert_not_called()
+
+
+def test_auth_configuration_is_parsed(load_server, monkeypatch):
+    for name, value in {**AUTH_ENV, "MCP_PUBLIC_URL": "https://mcp.example/"}.items():
+        monkeypatch.setenv(name, value)
+    server, _, requests, factory = load_server()
+    config = server["ServerConfig"].from_environment()
+    assert config.auth == AuthConfig(
+        "https://auth.example/o/app/", "client", "https://mcp.example", None, "preferred_username"
+    )
+    assert config.auth.resource_url == "https://mcp.example/mcp"
+    assert requests == []
+    factory.assert_not_called()
+
+
+def test_no_auth_variables_keep_current_behaviour(load_server):
+    server, _, _, _ = load_server()
+    assert server["ServerConfig"].from_environment().auth is None
+    assert server["ServerConfig"]("http://mealie.invalid", "placeholder").auth is None
+
+
+async def test_import_time_instance_refuses_auth_configuration(load_server, monkeypatch):
+    for name, value in AUTH_ENV.items():
+        monkeypatch.setenv(name, value)
+    namespace, _, requests, factory = load_server()
+    with pytest.raises(ValueError, match="MCP_AUTH_ISSUER"):
+        async with server_lifespan(namespace["mcp"], "streamable-http"):
+            pytest.fail("must not serve without authentication")
+    factory.assert_not_called()
+    assert requests == []
+
+
+def test_readme_documents_every_environment_variable():
+    source = "\n".join(p.read_text(encoding="utf-8") for p in Path("src").rglob("*.py"))
+    names = set(re.findall(r'os\.getenv\(\s*"([A-Z0-9_]+)"', source))
+    readme = Path("README.md").read_text(encoding="utf-8")
+    assert {"MCP_AUTH_ISSUER", "MCP_PUBLIC_URL"} <= names
+    assert sorted(n for n in names if f"`{n}`" not in readme) == []

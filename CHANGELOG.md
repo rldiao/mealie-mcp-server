@@ -29,6 +29,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Optional OAuth resource-server authentication for the `streamable-http`
+  transport, disabled unless `MCP_AUTH_ISSUER` is set. Requests to `/mcp` need a
+  bearer access token from your OpenID Connect provider, verified against its
+  published keys (`iss`, `aud`, `exp`, and optionally a group from
+  `MCP_AUTH_REQUIRED_GROUP`). Unauthenticated requests receive `401` with a
+  challenge pointing to RFC 9728 protected resource metadata at
+  `<MCP_PUBLIC_URL>/.well-known/oauth-protected-resource/mcp`. Configure it with
+  `MCP_AUTH_ISSUER`, `MCP_AUTH_AUDIENCE`, `MCP_AUTH_REQUIRED_GROUP`,
+  `MCP_AUTH_USERNAME_CLAIM`, and `MCP_PUBLIC_URL`; startup fails if these are
+  incomplete, set without the issuer, or combined with `stdio` or `sse`. Mealie
+  is still called with `MEALIE_API_KEY`; the client's token is never forwarded.
 - `create_recipe` and `update_recipe` accept a `nutrition` argument covering
   Mealie's full key set (calories, macros, cholesterol, sodium, sugars, and the
   fat breakdown). Numbers are converted to the strings Mealie stores. Mealie
@@ -49,6 +60,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- With `LOG_LEVEL=DEBUG`, SSE response chunks (tool results, including recipe
+  content) are no longer logged by `sse_starlette`.
 - Recipes now expose `showAssets` and `showNutrition` through their settings.
   Previously, uploaded assets and nutrition could be stored but hidden in the
   Mealie UI when household defaults disabled those cards.

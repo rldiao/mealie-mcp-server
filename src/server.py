@@ -6,8 +6,10 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from dotenv import load_dotenv
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 
+from mcp_auth import AuthConfig, OidcTokenVerifier
 from mealie import MealieFetcher
 from prompts import register_prompts
 from tools import register_ai_import_tools, register_all_tools
@@ -25,6 +27,7 @@ class ServerConfig:
     port: int = 8765
     log_level: str = "INFO"
     enable_ai_import: bool = False
+    auth: AuthConfig | None = None
 
     @classmethod
     def from_environment(cls) -> "ServerConfig":
@@ -41,6 +44,9 @@ class ServerConfig:
         transport = os.getenv("MCP_TRANSPORT", "stdio")
         if transport not in ("stdio", "sse", "streamable-http"):
             raise ValueError("MCP_TRANSPORT must be stdio, sse, or streamable-http")
+        auth = AuthConfig.from_environment()
+        if auth is not None and transport != "streamable-http":
+            raise ValueError("MCP_TRANSPORT must be streamable-http when MCP_AUTH_ISSUER is set")
         try:
             port = int(os.getenv("MCP_PORT", "8765"))
         except ValueError:
@@ -61,6 +67,7 @@ class ServerConfig:
             port=port,
             log_level=log_level,
             enable_ai_import=ai_import == "true",
+            auth=auth,
         )
 
 
@@ -71,6 +78,9 @@ def _configure_logging(level: str) -> None:
         handlers=[logging.StreamHandler()],
     )
     logger.setLevel(level)
+    # sse-starlette debug-logs every SSE chunk, which carries tool results
+    # (recipe and user content).
+    logging.getLogger("sse_starlette").setLevel(logging.INFO)
 
 
 class _ClientProvider:
@@ -121,16 +131,37 @@ class _MealieServer(FastMCP):
             async with self.client_provider.lifespan() as client:
                 yield {"mealie": client}
 
+        auth: dict[str, Any] = {}
+        if config is not None and config.auth is not None:
+            # Our verifier checks `aud` itself, so the SDK need not compare the
+            # RFC 8707 resource indicator.
+            auth = {
+                "token_verifier": OidcTokenVerifier(config.auth),
+                "auth": AuthSettings(
+                    issuer_url=config.auth.issuer,
+                    resource_server_url=config.auth.resource_url,
+                    validate_token_resource=False,
+                ),
+            }
+
         super().__init__(
             "mealie",
             host=config.host if config else "127.0.0.1",
             port=config.port if config else 8765,
             log_level=config.log_level if config else "INFO",
             lifespan=lifespan,
+            **auth,
         )
 
     def _configure_optional_tools(self) -> None:
         config = self.client_provider.configuration()
+        if config.auth is not None and self.settings.auth is None:
+            # The import-time instance (`mcp run`, `mcp dev`) has no verifier:
+            # never let it serve when authentication is configured.
+            raise ValueError(
+                "MCP_AUTH_ISSUER is set, but this server instance was created without "
+                "authentication; start the server with the mealie-mcp-server entry point"
+            )
         if config.enable_ai_import and not self._ai_import_registered:
             register_ai_import_tools(self, self.client_provider)
             self._ai_import_registered = True

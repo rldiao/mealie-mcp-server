@@ -12,6 +12,7 @@ such as Claude Desktop.
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [Remote Access](#remote-access)
+- [Authentication (OAuth resource server)](#authentication-oauth-resource-server)
 - [Docker](#docker)
 - [Usage Examples](#usage-examples)
 - [Available Tools](#available-tools)
@@ -103,6 +104,9 @@ your instance details. Never commit your API key.
 | `MCP_PORT` | `8765` | HTTP port, from 1 to 65535 |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL` |
 
+Optional OAuth settings for the HTTP endpoint are described in
+[Authentication (OAuth resource server)](#authentication-oauth-resource-server).
+
 ## Remote Access
 
 The default stdio transport is for local clients. To serve HTTP clients, configure
@@ -117,12 +121,83 @@ uv run mealie-mcp-server
 
 The server will expose its MCP endpoint at `http://<host>:<port>/mcp`.
 
-**Security:** HTTP transports have no built-in authentication. Anyone who can
-reach the endpoint can use the configured Mealie credentials through its tools.
-Keep it on a trusted interface; for remote access, use a reverse proxy that
-enforces authentication and HTTPS.
+**Security:** By default, HTTP transports do not authenticate clients; see
+[Authentication (OAuth resource server)](#authentication-oauth-resource-server).
+Without it, anyone who can reach the endpoint can use the configured Mealie
+credentials through its tools. Keep it on a trusted interface; for remote access,
+enable authentication and serve the endpoint over HTTPS.
 
 With `MCP_HOST` set to a local address (`127.0.0.1`, `localhost`, `::1`), the SDK enables its DNS rebinding protection and answers `421 Invalid Host header` to any other `Host`; behind a reverse proxy, bind `MCP_HOST` to `0.0.0.0` or to the interface the proxy sees.
+
+## Authentication (OAuth resource server)
+
+Enable authentication when the HTTP endpoint is reachable from outside a trusted
+network, for example as a remote connector in claude.ai. The server then acts as an
+OAuth 2.0 resource server: every request to `/mcp` must carry a bearer access token
+issued by your OpenID Connect provider. The server checks the token's signature
+against the provider's published keys, its `iss`, `aud`, and `exp` claims, and
+optionally a group membership. It does not issue tokens; clients obtain them from
+the provider.
+
+Authentication stays disabled unless `MCP_AUTH_ISSUER` is set. It is supported only
+with `MCP_TRANSPORT=streamable-http`: startup fails with `stdio` or `sse`, and also
+when another variable below is set without `MCP_AUTH_ISSUER`, so a typo in the
+issuer cannot leave the endpoint open.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MCP_AUTH_ISSUER` | Unset (authentication disabled) | Issuer URL, exactly as in the tokens' `iss` claim; discovery is read from `<issuer>/.well-known/openid-configuration` |
+| `MCP_AUTH_AUDIENCE` | Required with `MCP_AUTH_ISSUER` | Value expected in the `aud` claim, usually the OAuth client ID |
+| `MCP_AUTH_REQUIRED_GROUP` | Unset (no group check) | Group required in the `groups` claim of the token, or of the userinfo response when the token has none |
+| `MCP_AUTH_USERNAME_CLAIM` | `preferred_username` | Claim naming the user, read from the token or the userinfo response; tokens without it are rejected |
+| `MCP_PUBLIC_URL` | Required with `MCP_AUTH_ISSUER` | Public base URL that clients use, such as `https://mcp.example.com`, without a path; never an internal address |
+
+A request without a valid token receives `401 Unauthorized` with a challenge that
+points to the protected resource metadata (RFC 9728):
+
+```text
+WWW-Authenticate: Bearer error="invalid_token", error_description="...", resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp"
+```
+
+That document, served by this server, names the resource
+(`https://mcp.example.com/mcp`) and the issuer as its authorization server; MCP
+clients follow it to start the OAuth flow. A reverse proxy in front of the server
+must forward both `/mcp` and `/.well-known/oauth-protected-resource/mcp`.
+
+The server never forwards the client's access token to Mealie. Tool calls still use
+`MEALIE_API_KEY`, so every authenticated user acts through that key's Mealie
+account. Rejected tokens are logged with a short reason code only, never the token.
+
+### Example: authentik and claude.ai
+
+1. In authentik, create an OAuth2/OpenID provider with client type
+   **Confidential** and strict redirect URIs
+   `https://claude.ai/api/mcp/auth_callback` and
+   `https://claude.com/api/mcp/auth_callback`.
+2. Select the scopes `openid`, `profile` (which carries `preferred_username` and
+   `groups`), and `offline_access` (refresh tokens).
+3. Keep the access token validity short, such as `minutes=10`. Group memberships
+   are frozen in the access token, so removing someone from the required group
+   takes effect only when their current token expires.
+4. Create an application for the provider and bind it to the group you require.
+5. Start the server with:
+
+   ```bash
+   export MCP_TRANSPORT=streamable-http
+   export MCP_HOST=0.0.0.0
+   export MCP_AUTH_ISSUER=https://auth.example.com/application/o/mealie-mcp/
+   export MCP_AUTH_AUDIENCE=<client ID>
+   export MCP_AUTH_REQUIRED_GROUP=mealie-mcp-users
+   export MCP_PUBLIC_URL=https://mcp.example.com
+   uv run mealie-mcp-server
+   ```
+
+6. In claude.ai, add a custom connector with the URL `https://mcp.example.com/mcp`
+   and enter the client ID and secret in its advanced settings.
+
+Start the server through the `mealie-mcp-server` entry point (or
+`uv run src/server.py`). The instance that `mcp run` and `mcp dev` discover has no
+token verifier, so it refuses to start when `MCP_AUTH_ISSUER` is set.
 
 ## Docker
 

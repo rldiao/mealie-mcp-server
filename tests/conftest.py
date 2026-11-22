@@ -387,3 +387,70 @@ def rsa_key():
 @pytest.fixture
 def oidc(rsa_key):
     return FakeOidc(rsa_key)
+
+
+class FakeMealie:
+    """In-memory Mealie HTTP API for tests that run the real `MealieFetcher`.
+
+    `install()` makes every `httpx.Client` use `transport`, so no request leaves
+    the process. Bearer values map to Mealie users through `tokens`; routes map
+    `(method, path)` to handlers. Unknown routes fail the test.
+    """
+
+    API_KEY = "api-key-marker"
+
+    def __init__(self):
+        self.health_status = 200
+        self.requests: list[httpx.Request] = []
+        self.clients: list[httpx.Client] = []
+        self.tokens = {self.API_KEY: "shared"}
+        self.routes = {
+            ("GET", "/api/app/about"): self._about,
+            ("GET", "/api/recipes"): self._recipes,
+        }
+        self.transport = httpx.MockTransport(self._handle)
+
+    def install(self, monkeypatch):
+        original = httpx.Client
+        fake = self
+
+        class RecordingClient(original):
+            def __init__(self, *args, **kwargs):
+                kwargs["transport"] = fake.transport
+                super().__init__(*args, **kwargs)
+                fake.clients.append(self)
+
+        monkeypatch.setattr(httpx, "Client", RecordingClient)
+
+    def user(self, request):
+        """The Mealie user a request authenticates as, or None."""
+        scheme, _, credentials = request.headers.get("authorization", "").partition(" ")
+        if scheme.lower() != "bearer":
+            return None
+        return self.tokens.get(credentials)
+
+    def _handle(self, request):
+        self.requests.append(request)
+        handler = self.routes.get((request.method, request.url.path))
+        if handler is None:
+            raise AssertionError(
+                f"Unexpected Mealie request: {request.method} {request.url.path}"
+            )
+        return handler(request)
+
+    def _about(self, request):
+        return httpx.Response(self.health_status, json={"version": "v3.0.0"})
+
+    def _recipes(self, request):
+        user = self.user(request)
+        if user is None:
+            return httpx.Response(401, json={"detail": "Not authenticated"})
+        return httpx.Response(
+            200,
+            json={
+                "items": [{"id": "r1", "name": f"{user} recipe"}],
+                "page": 1,
+                "perPage": 50,
+                "total": 1,
+            },
+        )
