@@ -1,6 +1,6 @@
 import logging
 import os
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -9,25 +9,29 @@ from dotenv import load_dotenv
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 
-from mcp_auth import AuthConfig, OidcTokenVerifier
+from mcp_auth import AuthConfig, OidcTokenVerifier, current_username
 from mealie import MealieFetcher
+from mealie.reverse_proxy import ReverseProxyClientPool, ReverseProxyConfig
 from prompts import register_prompts
 from tools import register_ai_import_tools, register_all_tools
 
 logger = logging.getLogger("mealie-mcp")
 Transport = Literal["stdio", "sse", "streamable-http"]
+MealieAuthMode = Literal["api-key", "reverse-proxy"]
 
 
 @dataclass(frozen=True)
 class ServerConfig:
     base_url: str = field(repr=False)
-    api_key: str = field(repr=False)
+    api_key: str | None = field(repr=False)
     transport: Transport = "stdio"
     host: str = "127.0.0.1"
     port: int = 8765
     log_level: str = "INFO"
     enable_ai_import: bool = False
     auth: AuthConfig | None = None
+    mealie_auth_mode: MealieAuthMode = "api-key"
+    reverse_proxy: ReverseProxyConfig | None = field(default=None, repr=False)
 
     @classmethod
     def from_environment(cls) -> "ServerConfig":
@@ -35,18 +39,28 @@ class ServerConfig:
         ai_import = os.getenv("MEALIE_ENABLE_AI_IMPORT", "false").strip().lower()
         if ai_import not in ("true", "false"):
             raise ValueError("MEALIE_ENABLE_AI_IMPORT must be true or false")
+        mealie_auth_mode = os.getenv("MEALIE_AUTH_MODE", "api-key").strip().lower()
+        if mealie_auth_mode not in ("api-key", "reverse-proxy"):
+            raise ValueError("MEALIE_AUTH_MODE must be api-key or reverse-proxy")
         base_url = os.getenv("MEALIE_BASE_URL")
-        api_key = os.getenv("MEALIE_API_KEY")
-        if not base_url or not api_key:
-            raise ValueError(
-                "MEALIE_BASE_URL and MEALIE_API_KEY must be set in environment variables."
-            )
+        api_key = None
+        if mealie_auth_mode == "api-key":
+            api_key = os.getenv("MEALIE_API_KEY")
+            if not base_url or not api_key:
+                raise ValueError(
+                    "MEALIE_BASE_URL and MEALIE_API_KEY must be set in environment variables."
+                )
+        elif not base_url:
+            raise ValueError("MEALIE_BASE_URL must be set in environment variables.")
         transport = os.getenv("MCP_TRANSPORT", "stdio")
         if transport not in ("stdio", "sse", "streamable-http"):
             raise ValueError("MCP_TRANSPORT must be stdio, sse, or streamable-http")
         auth = AuthConfig.from_environment()
         if auth is not None and transport != "streamable-http":
             raise ValueError("MCP_TRANSPORT must be streamable-http when MCP_AUTH_ISSUER is set")
+        reverse_proxy = None
+        if mealie_auth_mode == "reverse-proxy":
+            reverse_proxy = _reverse_proxy_from_environment(auth)
         try:
             port = int(os.getenv("MCP_PORT", "8765"))
         except ValueError:
@@ -68,7 +82,30 @@ class ServerConfig:
             log_level=log_level,
             enable_ai_import=ai_import == "true",
             auth=auth,
+            mealie_auth_mode=mealie_auth_mode,
+            reverse_proxy=reverse_proxy,
         )
+
+
+def _reverse_proxy_from_environment(auth: AuthConfig | None) -> ReverseProxyConfig:
+    """Read the reverse-proxy settings; errors name the variable, never its value."""
+    if auth is None:
+        # Without authentication there is no user to act as.
+        raise ValueError("MCP_AUTH_ISSUER must be set when MEALIE_AUTH_MODE is reverse-proxy")
+    secret = os.getenv("MEALIE_REVERSE_PROXY_SECRET", "")
+    if not secret.strip():
+        raise ValueError(
+            "MEALIE_REVERSE_PROXY_SECRET must be set when MEALIE_AUTH_MODE is reverse-proxy"
+        )
+    user_header = os.getenv("MEALIE_REVERSE_PROXY_USER_HEADER", "X-Forwarded-User").strip()
+    if not user_header:
+        raise ValueError("MEALIE_REVERSE_PROXY_USER_HEADER must not be empty")
+    secret_header = os.getenv(
+        "MEALIE_REVERSE_PROXY_SECRET_HEADER", "X-Mealie-Reverse-Proxy-Secret"
+    ).strip()
+    if not secret_header:
+        raise ValueError("MEALIE_REVERSE_PROXY_SECRET_HEADER must not be empty")
+    return ReverseProxyConfig(secret, user_header, secret_header)
 
 
 def _configure_logging(level: str) -> None:
@@ -84,9 +121,17 @@ def _configure_logging(level: str) -> None:
 
 
 class _ClientProvider:
-    def __init__(self, config: ServerConfig | None):
+    """Hands tools the Mealie client: the shared one, or the current user's.
+
+    In `reverse-proxy` mode every attribute lookup resolves the user of the
+    current request; without one it fails, and never falls back to another client.
+    """
+
+    def __init__(self, config: ServerConfig | None, current_username: Callable[[], str | None]):
         self.config = config
+        self._current_username = current_username
         self._client: MealieFetcher | None = None
+        self._pool: ReverseProxyClientPool | None = None
         self._users = 0
 
     def configuration(self) -> ServerConfig:
@@ -95,38 +140,59 @@ class _ClientProvider:
         return self.config
 
     def __getattr__(self, name: str) -> Any:
+        if self.config is not None and self.config.mealie_auth_mode == "reverse-proxy":
+            username = self._current_username()
+            if username is None:
+                raise RuntimeError("Mealie tools require an authenticated user")
+            if self._pool is None:
+                raise RuntimeError("Mealie tools require an active server lifespan")
+            return getattr(self._pool.get(username), name)
         if self._client is None:
             raise RuntimeError("Mealie tools require an active server lifespan")
         return getattr(self._client, name)
 
     @contextmanager
-    def acquire(self) -> Iterator[MealieFetcher]:
-        if self._client is None:
+    def acquire(self) -> Iterator[MealieFetcher | ReverseProxyClientPool]:
+        if self._users == 0:
             config = self.configuration()
             _configure_logging(config.log_level)
-            self._client = MealieFetcher(config.base_url, config.api_key)
+            # Both constructors check Mealie's health once and raise on failure.
+            if config.mealie_auth_mode == "reverse-proxy":
+                if config.reverse_proxy is None:
+                    raise ValueError("MEALIE_REVERSE_PROXY_SECRET must be set in reverse-proxy mode")
+                self._pool = ReverseProxyClientPool(config.base_url, config.reverse_proxy)
+            else:
+                if config.api_key is None:
+                    raise ValueError("MEALIE_API_KEY must be set in api-key mode")
+                self._client = MealieFetcher(config.base_url, config.api_key)
         self._users += 1
         try:
-            yield self._client
+            yield self._pool if self._pool is not None else self._client
         finally:
             self._users -= 1
             if self._users == 0:
                 client, self._client = self._client, None
-                client.close()
+                pool, self._pool = self._pool, None
+                if client is not None:
+                    client.close()
+                if pool is not None:
+                    pool.close()
 
     @asynccontextmanager
-    async def lifespan(self) -> AsyncIterator[MealieFetcher]:
+    async def lifespan(self) -> AsyncIterator[MealieFetcher | ReverseProxyClientPool]:
         with self.acquire() as client:
             yield client
 
 
 class _MealieServer(FastMCP):
     def __init__(self, config: ServerConfig | None):
-        self.client_provider = _ClientProvider(config)
+        self.client_provider = _ClientProvider(config, lambda: current_username(self))
         self._ai_import_registered = False
 
         @asynccontextmanager
-        async def lifespan(_: FastMCP) -> AsyncIterator[dict[str, MealieFetcher]]:
+        async def lifespan(
+            _: FastMCP,
+        ) -> AsyncIterator[dict[str, MealieFetcher | ReverseProxyClientPool]]:
             self._configure_optional_tools()
             async with self.client_provider.lifespan() as client:
                 yield {"mealie": client}

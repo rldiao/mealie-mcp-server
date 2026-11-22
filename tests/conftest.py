@@ -20,6 +20,20 @@ from mealie import MealieFetcher
 from mealie.client import MealieApiError
 from tools import register_all_tools
 
+# Variables of the authentication and reverse-proxy modes, cleared by the
+# server fixtures so the developer's environment never leaks into a test.
+AUTH_VARIABLES = (
+    "MCP_AUTH_ISSUER",
+    "MCP_AUTH_AUDIENCE",
+    "MCP_AUTH_REQUIRED_GROUP",
+    "MCP_AUTH_USERNAME_CLAIM",
+    "MCP_PUBLIC_URL",
+    "MEALIE_AUTH_MODE",
+    "MEALIE_REVERSE_PROXY_SECRET",
+    "MEALIE_REVERSE_PROXY_USER_HEADER",
+    "MEALIE_REVERSE_PROXY_SECRET_HEADER",
+)
+
 # A minimal but schema-valid recipe payload (satisfies the required Recipe
 # fields), used as the response to GET /api/recipes/<slug>.
 BASE_RECIPE = {

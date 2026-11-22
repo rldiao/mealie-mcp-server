@@ -12,24 +12,20 @@ import anyio
 import httpx
 import pytest
 
+from conftest import AUTH_VARIABLES
 from mcp_auth import AuthConfig
+from mealie.reverse_proxy import ReverseProxyConfig
 
-AUTH_VARIABLES = (
-    "MCP_AUTH_ISSUER",
-    "MCP_AUTH_AUDIENCE",
-    "MCP_AUTH_REQUIRED_GROUP",
-    "MCP_AUTH_USERNAME_CLAIM",
-    "MCP_PUBLIC_URL",
-    "MEALIE_AUTH_MODE",
-    "MEALIE_REVERSE_PROXY_SECRET",
-    "MEALIE_REVERSE_PROXY_USER_HEADER",
-    "MEALIE_REVERSE_PROXY_SECRET_HEADER",
-)
 AUTH_ENV = {
     "MCP_TRANSPORT": "streamable-http",
     "MCP_AUTH_ISSUER": "https://auth.example/o/app/",
     "MCP_AUTH_AUDIENCE": "client",
     "MCP_PUBLIC_URL": "https://mcp.example",
+}
+RP_ENV = {
+    **AUTH_ENV,
+    "MEALIE_AUTH_MODE": "reverse-proxy",
+    "MEALIE_REVERSE_PROXY_SECRET": "secret-marker",
 }
 
 
@@ -448,6 +444,75 @@ async def test_import_time_instance_refuses_auth_configuration(load_server, monk
             pytest.fail("must not serve without authentication")
     factory.assert_not_called()
     assert requests == []
+
+
+@pytest.mark.parametrize(
+    ("env", "message"),
+    [
+        ({"MEALIE_AUTH_MODE": "proxy"}, "MEALIE_AUTH_MODE"),
+        (
+            {
+                "MEALIE_AUTH_MODE": "reverse-proxy",
+                "MEALIE_REVERSE_PROXY_SECRET": "secret-marker",
+                "MCP_TRANSPORT": "streamable-http",
+            },
+            "MCP_AUTH_ISSUER",
+        ),
+        ({**RP_ENV, "MEALIE_REVERSE_PROXY_SECRET": ""}, "MEALIE_REVERSE_PROXY_SECRET"),
+        ({**RP_ENV, "MEALIE_REVERSE_PROXY_USER_HEADER": " "}, "MEALIE_REVERSE_PROXY_USER_HEADER"),
+        (
+            {**RP_ENV, "MEALIE_REVERSE_PROXY_SECRET_HEADER": " "},
+            "MEALIE_REVERSE_PROXY_SECRET_HEADER",
+        ),
+    ],
+)
+def test_invalid_reverse_proxy_configuration_fails_before_http_allocation(
+    load_server, monkeypatch, env, message
+):
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    server, _, requests, factory = load_server()
+    with pytest.raises(ValueError, match=message) as error:
+        server["main"]()
+    assert "auth.example" not in str(error.value) and "mcp.example" not in str(error.value)
+    assert "secret-marker" not in str(error.value)
+    assert requests == []
+    factory.assert_not_called()
+
+
+def test_reverse_proxy_configuration_without_api_key(load_server, monkeypatch):
+    for name, value in RP_ENV.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("MEALIE_API_KEY")
+    server, _, requests, factory = load_server()
+    config = server["ServerConfig"].from_environment()
+    assert config.mealie_auth_mode == "reverse-proxy" and config.api_key is None
+    assert config.reverse_proxy == ReverseProxyConfig("secret-marker")
+    assert "secret-marker" not in repr(config)
+    assert requests == []
+    factory.assert_not_called()
+
+
+def test_reverse_proxy_headers_are_configurable(load_server, monkeypatch):
+    env = {
+        **RP_ENV,
+        "MEALIE_REVERSE_PROXY_USER_HEADER": " Remote-User ",
+        "MEALIE_REVERSE_PROXY_SECRET_HEADER": "X-Proxy-Secret",
+    }
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    server, _, _, _ = load_server()
+    config = server["ServerConfig"].from_environment()
+    assert config.reverse_proxy == ReverseProxyConfig(
+        "secret-marker", "Remote-User", "X-Proxy-Secret"
+    )
+
+
+def test_api_key_mode_is_the_default(load_server):
+    server, _, _, _ = load_server()
+    config = server["ServerConfig"].from_environment()
+    assert config.mealie_auth_mode == "api-key"
+    assert config.reverse_proxy is None
 
 
 def test_readme_documents_every_environment_variable():

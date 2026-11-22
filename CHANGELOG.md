@@ -40,6 +40,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `MCP_AUTH_USERNAME_CLAIM`, and `MCP_PUBLIC_URL`; startup fails if these are
   incomplete, set without the issuer, or combined with `stdio` or `sse`. Mealie
   is still called with `MEALIE_API_KEY`; the client's token is never forwarded.
+- `MEALIE_AUTH_MODE=reverse-proxy` calls Mealie as each authenticated user
+  instead of with `MEALIE_API_KEY`. The username from the verified access token
+  is exchanged for that user's Mealie token through Mealie's trusted
+  reverse-proxy sign-in (`GET /api/auth/reverse-proxy`, Mealie's
+  `REVERSE_PROXY_AUTH_*` settings); the identity provider's token is never
+  forwarded. Configure it with `MEALIE_REVERSE_PROXY_SECRET`,
+  `MEALIE_REVERSE_PROXY_USER_HEADER`, and `MEALIE_REVERSE_PROXY_SECRET_HEADER`;
+  startup fails without `MCP_AUTH_ISSUER` or the secret. Per-user clients are
+  cached in memory (at most 256) and renewed before their token expires; tool
+  calls without an authenticated user fail instead of falling back to another
+  account, and users without a Mealie account get a readable tool error.
 - `create_recipe` and `update_recipe` accept a `nutrition` argument covering
   Mealie's full key set (calories, macros, cholesterol, sodium, sugars, and the
   fat breakdown). Numbers are converted to the strings Mealie stores. Mealie

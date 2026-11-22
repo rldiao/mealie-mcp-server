@@ -97,7 +97,7 @@ your instance details. Never commit your API key.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `MEALIE_BASE_URL` | Required | Mealie base URL, including protocol and port if needed |
-| `MEALIE_API_KEY` | Required | API key from your Mealie account settings |
+| `MEALIE_API_KEY` | Required in `api-key` mode | API key from your Mealie account settings |
 | `MEALIE_ENABLE_AI_IMPORT` | `false` | Opt in to AI recipe import; accepts `true`/`false` (case-insensitive) |
 | `MCP_TRANSPORT` | `stdio` | `stdio`, `streamable-http`, or legacy `sse` |
 | `MCP_HOST` | `127.0.0.1` | HTTP bind address; use `0.0.0.0` in containers |
@@ -105,7 +105,10 @@ your instance details. Never commit your API key.
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL` |
 
 Optional OAuth settings for the HTTP endpoint are described in
-[Authentication (OAuth resource server)](#authentication-oauth-resource-server).
+[Authentication (OAuth resource server)](#authentication-oauth-resource-server);
+calling Mealie as each authenticated user instead of with `MEALIE_API_KEY` is
+described in
+[Acting as each user](#acting-as-each-user-mealie-reverse-proxy-sign-in).
 
 ## Remote Access
 
@@ -164,9 +167,11 @@ That document, served by this server, names the resource
 clients follow it to start the OAuth flow. A reverse proxy in front of the server
 must forward both `/mcp` and `/.well-known/oauth-protected-resource/mcp`.
 
-The server never forwards the client's access token to Mealie. Tool calls still use
-`MEALIE_API_KEY`, so every authenticated user acts through that key's Mealie
-account. Rejected tokens are logged with a short reason code only, never the token.
+The server never forwards the client's access token to Mealie. By default, tool
+calls still use `MEALIE_API_KEY`, so every authenticated user acts through that
+key's Mealie account; see
+[Acting as each user](#acting-as-each-user-mealie-reverse-proxy-sign-in) to call
+Mealie as each user instead. Rejected tokens are logged with a short reason code only, never the token.
 
 ### Example: authentik and claude.ai
 
@@ -198,6 +203,55 @@ account. Rejected tokens are logged with a short reason code only, never the tok
 Start the server through the `mealie-mcp-server` entry point (or
 `uv run src/server.py`). The instance that `mcp run` and `mcp dev` discover has no
 token verifier, so it refuses to start when `MCP_AUTH_ISSUER` is set.
+
+### Acting as each user (Mealie reverse-proxy sign-in)
+
+By default, every authenticated user reaches Mealie through `MEALIE_API_KEY`.
+With `MEALIE_AUTH_MODE=reverse-proxy`, the server instead calls Mealie as the
+user behind each request, so recipes, meal plans, and shopping lists belong to
+that user's own Mealie account:
+
+1. The username is taken from the verified access token (the claim named by
+   `MCP_AUTH_USERNAME_CLAIM`).
+2. The server exchanges it for a Mealie token of that user through Mealie's
+   trusted reverse-proxy sign-in (`GET /api/auth/reverse-proxy` with the
+   username and shared-secret headers).
+3. Tool calls use that Mealie token. The identity provider's access token is
+   never forwarded to Mealie.
+
+This mode requires authentication (`MCP_AUTH_ISSUER`) and ignores
+`MEALIE_API_KEY`. Tool calls without an authenticated user fail; they never fall
+back to another account. A user without a Mealie account gets a readable tool
+error asking them to sign in to Mealie once in a browser.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MEALIE_AUTH_MODE` | `api-key` | `api-key` calls Mealie with `MEALIE_API_KEY`; `reverse-proxy` calls Mealie as each authenticated user and requires `MCP_AUTH_ISSUER` |
+| `MEALIE_REVERSE_PROXY_SECRET` | Required in `reverse-proxy` mode | Secret shared with Mealie's `REVERSE_PROXY_AUTH_SECRET` |
+| `MEALIE_REVERSE_PROXY_USER_HEADER` | `X-Forwarded-User` | Header carrying the username; must match Mealie's `REVERSE_PROXY_AUTH_HEADER` |
+| `MEALIE_REVERSE_PROXY_SECRET_HEADER` | `X-Mealie-Reverse-Proxy-Secret` | Header carrying the secret; must match Mealie's `REVERSE_PROXY_AUTH_SECRET_HEADER` |
+
+Configure Mealie with:
+
+```bash
+REVERSE_PROXY_AUTH_ENABLED=true
+REVERSE_PROXY_AUTH_SIGNUP_ENABLED=false
+REVERSE_PROXY_AUTH_SECRET=<the same long random value as MEALIE_REVERSE_PROXY_SECRET>
+```
+
+Before enabling it:
+
+- The secret lets its holder act as **any** Mealie account. Generate a long random
+  value, store it as a secret, and never log or share it.
+- Block `/api/auth/reverse-proxy` on any public proxy in front of Mealie, so only
+  this server can reach the exchange route, for example through an internal
+  service address.
+- With sign-up disabled, Mealie accounts are not created by this server: each
+  user signs in to the Mealie website once (for example through OIDC) before
+  using the tools.
+- Per-user Mealie clients are cached in memory (at most 256, least recently used
+  first out) and renewed before their Mealie token expires. Restarting the server
+  clears the cache.
 
 ## Docker
 
