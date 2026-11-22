@@ -36,6 +36,13 @@ class MealieAccountUnavailable(ValueError):
         super().__init__(ACCOUNT_UNAVAILABLE)
 
 
+class MealieUsernameNotAscii(ValueError):
+    """The username cannot be sent as an HTTP header (message never names it)."""
+
+    def __init__(self) -> None:
+        super().__init__("Mealie reverse-proxy sign-in requires an ASCII username")
+
+
 class ReverseProxyFetcher(MealieFetcher):
     """A Mealie client acting as one user, renewing its token once on a 401."""
 
@@ -116,6 +123,8 @@ class ReverseProxyClientPool:
     def _exchange(self, username: str) -> MealieToken:
         # A fresh client per exchange: Mealie answers with a session cookie that a
         # shared client would send on the next exchange, for another user.
+        if not username.isascii():
+            raise MealieUsernameNotAscii()
         http = httpx.Client(base_url=self._base_url, timeout=30.0)
         try:
             response = http.get(

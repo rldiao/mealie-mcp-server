@@ -480,6 +480,30 @@ def test_invalid_reverse_proxy_configuration_fails_before_http_allocation(
     factory.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "variable",
+    [
+        "MEALIE_REVERSE_PROXY_SECRET",
+        "MEALIE_REVERSE_PROXY_USER_HEADER",
+        "MEALIE_REVERSE_PROXY_SECRET_HEADER",
+    ],
+)
+def test_orphan_reverse_proxy_variables_fail_in_api_key_mode(load_server, monkeypatch, variable):
+    monkeypatch.setenv(variable, "secret-marker")
+    server, _, requests, factory = load_server()
+    with pytest.raises(ValueError, match="MEALIE_AUTH_MODE") as error:
+        server["main"]()
+    assert "secret-marker" not in str(error.value)
+    assert requests == []
+    factory.assert_not_called()
+
+
+def test_blank_reverse_proxy_variables_are_ignored_in_api_key_mode(load_server, monkeypatch):
+    monkeypatch.setenv("MEALIE_REVERSE_PROXY_SECRET", "  ")
+    server, _, _, _ = load_server()
+    assert server["ServerConfig"].from_environment().mealie_auth_mode == "api-key"
+
+
 def test_reverse_proxy_configuration_without_api_key(load_server, monkeypatch):
     for name, value in RP_ENV.items():
         monkeypatch.setenv(name, value)

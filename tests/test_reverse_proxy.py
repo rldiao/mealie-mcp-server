@@ -73,6 +73,13 @@ def test_unknown_account_raises_readable_error_and_is_not_cached(mealie, pool):
     assert len(mealie.exchanges) == 2
 
 
+def test_non_ascii_username_fails_readably_without_exchange(mealie, pool):
+    with pytest.raises(ValueError, match="requires an ASCII username") as error:
+        pool.get("hélène")
+    assert "hél" not in str(error.value)
+    assert mealie.exchanges == []
+
+
 def test_account_unavailable_is_a_value_error():
     assert issubclass(MealieAccountUnavailable, ValueError)
 

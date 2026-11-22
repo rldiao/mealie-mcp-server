@@ -42,6 +42,17 @@ class ServerConfig:
         mealie_auth_mode = os.getenv("MEALIE_AUTH_MODE", "api-key").strip().lower()
         if mealie_auth_mode not in ("api-key", "reverse-proxy"):
             raise ValueError("MEALIE_AUTH_MODE must be api-key or reverse-proxy")
+        if mealie_auth_mode == "api-key" and any(
+            os.getenv(name, "").strip()
+            for name in (
+                "MEALIE_REVERSE_PROXY_SECRET",
+                "MEALIE_REVERSE_PROXY_USER_HEADER",
+                "MEALIE_REVERSE_PROXY_SECRET_HEADER",
+            )
+        ):
+            raise ValueError(
+                "MEALIE_AUTH_MODE must be reverse-proxy when MEALIE_REVERSE_PROXY_* variables are set"
+            )
         base_url = os.getenv("MEALIE_BASE_URL")
         api_key = None
         if mealie_auth_mode == "api-key":
