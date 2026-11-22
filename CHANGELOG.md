@@ -25,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Breaking:** Removed `parse_ingredient`; use `parse_ingredients` with a
   one-element list and read its first result. All lines are validated before
   sending the request. The MCP inventory is reduced from 70 to 61 tools.
-- Require `mcp` 1.30 or later. With `MCP_HOST` set to a local address (`127.0.0.1`, `localhost`, `::1`), the SDK enables its DNS rebinding protection and answers `421 Invalid Host header` to any other `Host`; behind a reverse proxy, bind `MCP_HOST` to `0.0.0.0` or to the interface the proxy sees.
+- Require `mcp` 1.30 or later. With `MCP_HOST` set to a local address (`127.0.0.1`, `localhost`, `::1`), the SDK enables its DNS rebinding protection and answers `421 Invalid Host header` to any other `Host`; behind a proxy on the same machine, have it send a loopback `Host`; bind `0.0.0.0` only in a container or private network, or with authentication enabled.
 
 ### Added
 

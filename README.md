@@ -130,7 +130,7 @@ Without it, anyone who can reach the endpoint can use the configured Mealie
 credentials through its tools. Keep it on a trusted interface; for remote access,
 enable authentication and serve the endpoint over HTTPS.
 
-With `MCP_HOST` set to a local address (`127.0.0.1`, `localhost`, `::1`), the SDK enables its DNS rebinding protection and answers `421 Invalid Host header` to any other `Host`; behind a reverse proxy, bind `MCP_HOST` to `0.0.0.0` or to the interface the proxy sees.
+With `MCP_HOST` set to a local address (`127.0.0.1`, `localhost`, `::1`), the SDK enables its DNS rebinding protection and answers `421 Invalid Host header` to any other `Host`; for a proxy on the same machine, prefer having the proxy send a loopback `Host` (for example nginx `proxy_set_header Host $proxy_host;` or equivalent). Bind `0.0.0.0` only inside a container or private network, or with authentication enabled: otherwise the unauthenticated endpoint, and the Mealie API key behind it, is reachable on every interface, bypassing the proxy.
 
 ## Authentication (OAuth resource server)
 
@@ -227,9 +227,12 @@ error asking them to sign in to Mealie once in a browser.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `MEALIE_AUTH_MODE` | `api-key` | `api-key` calls Mealie with `MEALIE_API_KEY`; `reverse-proxy` calls Mealie as each authenticated user and requires `MCP_AUTH_ISSUER` |
-| `MEALIE_REVERSE_PROXY_SECRET` | Required in `reverse-proxy` mode | Secret shared with Mealie's `REVERSE_PROXY_AUTH_SECRET` |
+| `MEALIE_REVERSE_PROXY_SECRET` | Required in `reverse-proxy` mode; refused (when non-blank) in `api-key` mode | Secret shared with Mealie's `REVERSE_PROXY_AUTH_SECRET` |
 | `MEALIE_REVERSE_PROXY_USER_HEADER` | `X-Forwarded-User` | Header carrying the username; must match Mealie's `REVERSE_PROXY_AUTH_HEADER` |
 | `MEALIE_REVERSE_PROXY_SECRET_HEADER` | `X-Mealie-Reverse-Proxy-Secret` | Header carrying the secret; must match Mealie's `REVERSE_PROXY_AUTH_SECRET_HEADER` |
+
+The three `MEALIE_REVERSE_PROXY_*` variables are refused when `MEALIE_AUTH_MODE` is
+`api-key` (blank counts as unset), so a typo in the mode cannot silently ignore them.
 
 Configure Mealie with:
 
@@ -246,6 +249,11 @@ Before enabling it:
 - Block `/api/auth/reverse-proxy` on any public proxy in front of Mealie, so only
   this server can reach the exchange route, for example through an internal
   service address.
+- The username claim (`MCP_AUTH_USERNAME_CLAIM`, default `preferred_username`) is
+  trusted as the Mealie identity. It must be unique and set by an administrator,
+  never editable by users, and never an unverified email. Mealie matches the header
+  value against usernames and then emails, case-insensitively, so a user who can
+  change this claim can act as another account, including an admin.
 - With sign-up disabled, Mealie accounts are not created by this server: each
   user signs in to the Mealie website once (for example through OIDC) before
   using the tools.
