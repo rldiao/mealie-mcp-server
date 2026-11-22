@@ -122,6 +122,8 @@ reach the endpoint can use the configured Mealie credentials through its tools.
 Keep it on a trusted interface; for remote access, use a reverse proxy that
 enforces authentication and HTTPS.
 
+With `MCP_HOST` set to a local address (`127.0.0.1`, `localhost`, `::1`), the SDK enables its DNS rebinding protection and answers `421 Invalid Host header` to any other `Host`; behind a reverse proxy, bind `MCP_HOST` to `0.0.0.0` or to the interface the proxy sees.
+
 ## Docker
 
 The [Dockerfile](Dockerfile) runs the server as a persistent container.

@@ -363,3 +363,11 @@ async def test_http_sessions_initialize_list_and_call_tools(load_server, monkeyp
     assert sum(req.url.path == "/api/app/about" for req in requests) == 1
     factory.assert_called_once()
     assert mealie_client.is_closed
+
+
+def test_sdk_advertises_rfc9728_resource_metadata_path():
+    from mcp.server.auth.routes import build_resource_metadata_url
+    from pydantic import AnyHttpUrl
+
+    url = build_resource_metadata_url(AnyHttpUrl("https://mcp.example/mcp"))
+    assert str(url) == "https://mcp.example/.well-known/oauth-protected-resource/mcp"
