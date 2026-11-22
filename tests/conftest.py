@@ -5,11 +5,17 @@ records the HTTP requests the mixins would make (method, url, json, params)
 and returns canned responses. No network access is required.
 """
 
+import json
+import time
 from copy import deepcopy
 
+import httpx
+import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 from mcp.server.fastmcp import FastMCP
 
+from mcp_auth import AuthConfig
 from mealie import MealieFetcher
 from mealie.client import MealieApiError
 from tools import register_all_tools
@@ -279,3 +285,105 @@ def invoke(server):
         return content
 
     return _invoke
+
+
+class FakeOidc:
+    """In-memory OIDC provider: discovery, JWKS and userinfo over MockTransport."""
+
+    issuer = "https://auth.example/application/o/mealie-mcp/"
+    audience = "mealie-mcp-client"
+
+    def __init__(self, key):
+        self.discovery_url = (
+            self.issuer.rstrip("/") + "/.well-known/openid-configuration"
+        )
+        self.jwks_uri = "https://auth.example/application/o/mealie-mcp/jwks/"
+        self.userinfo_endpoint = "https://auth.example/application/o/userinfo/"
+        self.discovery_status = 200
+        self.userinfo = None
+        self.requests = []
+        self.keys = {}
+        self.current_kid = None
+        self.publish_key("k1", key)
+        self.transport = httpx.MockTransport(self._handle)
+
+    def publish_key(self, kid, key=None):
+        self.keys[kid] = key or rsa.generate_private_key(
+            public_exponent=65537, key_size=2048
+        )
+        self.current_kid = kid
+
+    def _jwks(self):
+        keys = []
+        for kid, key in self.keys.items():
+            jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(key.public_key()))
+            keys.append({**jwk, "kid": kid, "use": "sig", "alg": "RS256"})
+        return {"keys": keys}
+
+    def _handle(self, request):
+        self.requests.append(request)
+        url = str(request.url)
+        if url == self.discovery_url:
+            if self.discovery_status != 200:
+                return httpx.Response(self.discovery_status)
+            return httpx.Response(
+                200,
+                json={
+                    "issuer": self.issuer,
+                    "jwks_uri": self.jwks_uri,
+                    "userinfo_endpoint": self.userinfo_endpoint,
+                },
+            )
+        if url == self.jwks_uri:
+            return httpx.Response(200, json=self._jwks())
+        if url == self.userinfo_endpoint:
+            if self.userinfo is None:
+                return httpx.Response(401)
+            return httpx.Response(200, json=self.userinfo)
+        return httpx.Response(404)
+
+    def claims(self, **overrides):
+        now = int(time.time())
+        claims = {
+            "iss": self.issuer,
+            "aud": self.audience,
+            "sub": "sub-alice",
+            "iat": now,
+            "exp": now + 600,
+            "preferred_username": "alice",
+            "groups": ["miam-contributors"],
+            **overrides,
+        }
+        return {k: v for k, v in claims.items() if v is not None}
+
+    def token(self, *, kid="k1", key=None, algorithm="RS256", **overrides):
+        headers = {"kid": kid} if kid is not None else {}
+        return jwt.encode(
+            self.claims(**overrides),
+            key or self.keys[self.current_kid],
+            algorithm=algorithm,
+            headers=headers,
+        )
+
+    def config(self, **overrides):
+        values = {
+            "issuer": self.issuer,
+            "audience": self.audience,
+            "public_url": "https://miam-mcp.example",
+            "required_group": "miam-contributors",
+            **overrides,
+        }
+        return AuthConfig(**values)
+
+    def count(self, url):
+        return sum(1 for r in self.requests if str(r.url) == url)
+
+
+@pytest.fixture(scope="session")
+def rsa_key():
+    return rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+
+@pytest.fixture
+def oidc(rsa_key):
+    return FakeOidc(rsa_key)

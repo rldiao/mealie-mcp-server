@@ -407,6 +407,7 @@ dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "pydantic", version = "2.11.7", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
     { name = "pydantic", version = "2.14.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14'" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "python-dotenv" },
 ]
 
@@ -426,6 +427,7 @@ requires-dist = [
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.13.0" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.30.0,<2" },
     { name = "pydantic", specifier = ">=2.11.3" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "python-dotenv", specifier = ">=1.1.0" },
