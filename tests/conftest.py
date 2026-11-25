@@ -365,7 +365,7 @@ class FakeOidc:
             "iat": now,
             "exp": now + 600,
             "preferred_username": "alice",
-            "groups": ["miam-contributors"],
+            "groups": ["mealie-users"],
             **overrides,
         }
         return {k: v for k, v in claims.items() if v is not None}
@@ -383,8 +383,8 @@ class FakeOidc:
         values = {
             "issuer": self.issuer,
             "audience": self.audience,
-            "public_url": "https://miam-mcp.example",
-            "required_group": "miam-contributors",
+            "public_url": "https://mcp.example",
+            "required_group": "mealie-users",
             **overrides,
         }
         return AuthConfig(**values)

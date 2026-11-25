@@ -52,7 +52,7 @@ async def test_rejects_unsigned_and_malformed_tokens(oidc, verifier):
 
 
 async def test_group_found_in_userinfo_when_missing_from_token(oidc, verifier):
-    oidc.userinfo = {"sub": "sub-alice", "groups": ["miam-contributors"]}
+    oidc.userinfo = {"sub": "sub-alice", "groups": ["mealie-users"]}
     assert await verifier.verify_token(oidc.token(groups=None)) is not None
     userinfo = [r for r in oidc.requests if str(r.url) == oidc.userinfo_endpoint]
     assert len(userinfo) == 1
@@ -66,7 +66,7 @@ async def test_group_missing_everywhere_is_rejected(oidc, verifier, caplog):
 
 
 async def test_userinfo_for_another_subject_is_rejected(oidc, verifier):
-    oidc.userinfo = {"sub": "sub-bob", "groups": ["miam-contributors"]}
+    oidc.userinfo = {"sub": "sub-bob", "groups": ["mealie-users"]}
     assert await verifier.verify_token(oidc.token(groups=None)) is None
 
 
@@ -86,7 +86,7 @@ async def test_username_from_userinfo_then_missing(oidc, verifier):
 async def test_userinfo_requested_once_for_group_and_username(oidc, verifier):
     oidc.userinfo = {
         "sub": "sub-alice",
-        "groups": ["miam-contributors"],
+        "groups": ["mealie-users"],
         "preferred_username": "alice",
     }
     token = oidc.token(groups=None, preferred_username=None)

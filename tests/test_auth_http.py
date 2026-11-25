@@ -18,7 +18,7 @@ from mcp.server.fastmcp.exceptions import ToolError
 
 from conftest import AUTH_VARIABLES, FakeMealie
 
-PUBLIC_URL = "https://miam-mcp.example"
+PUBLIC_URL = "https://mcp.example"
 # Concurrent requests in one MCP session need distinct JSON-RPC ids: the
 # transport routes each response to the stream registered under its id.
 _REQUEST_IDS = itertools.count(2)
@@ -46,7 +46,7 @@ def http_app(monkeypatch, oidc):
             "MCP_HOST": "0.0.0.0",
             "MCP_AUTH_ISSUER": oidc.issuer,
             "MCP_AUTH_AUDIENCE": oidc.audience,
-            "MCP_AUTH_REQUIRED_GROUP": "miam-contributors",
+            "MCP_AUTH_REQUIRED_GROUP": "mealie-users",
             "MCP_PUBLIC_URL": PUBLIC_URL,
             **env,
         }
@@ -129,12 +129,12 @@ async def test_missing_token_is_challenged_with_resource_metadata(http_app):
         response = await app.client.post("/mcp", json={})
         assert response.status_code == 401
         assert (
-            'resource_metadata="https://miam-mcp.example/.well-known/oauth-protected-resource/mcp"'
+            'resource_metadata="https://mcp.example/.well-known/oauth-protected-resource/mcp"'
             in response.headers["www-authenticate"]
         )
         metadata = await app.client.get("/.well-known/oauth-protected-resource/mcp")
         assert metadata.status_code == 200
-        assert metadata.json()["resource"] == "https://miam-mcp.example/mcp"
+        assert metadata.json()["resource"] == "https://mcp.example/mcp"
         assert metadata.json()["authorization_servers"] == [app.oidc.issuer]
 
 
@@ -154,7 +154,8 @@ async def test_rejected_tokens_get_401(http_app, claims):
 
 async def test_valid_token_calls_mealie_with_api_key(http_app):
     async with http_app() as app:
-        # Host is miam-mcp.example with MCP_HOST=0.0.0.0: pins the § 10.3 finding
+        # Host is mcp.example with MCP_HOST=0.0.0.0: the SDK's DNS-rebinding
+        # protection stays off, so a public Host header is accepted
         headers = await initialize(app.client, app.oidc.token())
         status, result = await call_tool(app.client, headers, "get_recipes")
         assert status == 200 and result.get("isError") is not True
