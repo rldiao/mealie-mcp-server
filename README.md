@@ -12,6 +12,7 @@ such as Claude Desktop.
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [Remote Access](#remote-access)
+- [Authentication (OAuth resource server)](#authentication-oauth-resource-server)
 - [Docker](#docker)
 - [Usage Examples](#usage-examples)
 - [Available Tools](#available-tools)
@@ -96,12 +97,18 @@ your instance details. Never commit your API key.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `MEALIE_BASE_URL` | Required | Mealie base URL, including protocol and port if needed |
-| `MEALIE_API_KEY` | Required | API key from your Mealie account settings |
+| `MEALIE_API_KEY` | Required in `api-key` mode | API key from your Mealie account settings |
 | `MEALIE_ENABLE_AI_IMPORT` | `false` | Opt in to AI recipe import; accepts `true`/`false` (case-insensitive) |
 | `MCP_TRANSPORT` | `stdio` | `stdio`, `streamable-http`, or legacy `sse` |
 | `MCP_HOST` | `127.0.0.1` | HTTP bind address; use `0.0.0.0` in containers |
 | `MCP_PORT` | `8765` | HTTP port, from 1 to 65535 |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL` |
+
+Optional OAuth settings for the HTTP endpoint are described in
+[Authentication (OAuth resource server)](#authentication-oauth-resource-server);
+calling Mealie as each authenticated user instead of with `MEALIE_API_KEY` is
+described in
+[Acting as each user](#acting-as-each-user-mealie-reverse-proxy-sign-in).
 
 ## Remote Access
 
@@ -117,10 +124,142 @@ uv run mealie-mcp-server
 
 The server will expose its MCP endpoint at `http://<host>:<port>/mcp`.
 
-**Security:** HTTP transports have no built-in authentication. Anyone who can
-reach the endpoint can use the configured Mealie credentials through its tools.
-Keep it on a trusted interface; for remote access, use a reverse proxy that
-enforces authentication and HTTPS.
+**Security:** By default, HTTP transports do not authenticate clients; see
+[Authentication (OAuth resource server)](#authentication-oauth-resource-server).
+Without it, anyone who can reach the endpoint can use the configured Mealie
+credentials through its tools. Keep it on a trusted interface; for remote access,
+enable authentication and serve the endpoint over HTTPS.
+
+With `MCP_HOST` set to a local address (`127.0.0.1`, `localhost`, `::1`), the SDK enables its DNS rebinding protection and answers `421 Invalid Host header` to any other `Host`; for a proxy on the same machine, prefer having the proxy send a loopback `Host` (for example nginx `proxy_set_header Host $proxy_host;` or equivalent). Bind `0.0.0.0` only inside a container or private network, or with authentication enabled: otherwise the unauthenticated endpoint, and the Mealie API key behind it, is reachable on every interface, bypassing the proxy.
+
+## Authentication (OAuth resource server)
+
+Enable authentication when the HTTP endpoint is reachable from outside a trusted
+network, for example as a remote connector in claude.ai. The server then acts as an
+OAuth 2.0 resource server: every request to `/mcp` must carry a bearer access token
+issued by your OpenID Connect provider. The server checks the token's signature
+against the provider's published keys, its `iss`, `aud`, and `exp` claims, and
+optionally a group membership. It does not issue tokens; clients obtain them from
+the provider.
+
+Authentication stays disabled unless `MCP_AUTH_ISSUER` is set. It is supported only
+with `MCP_TRANSPORT=streamable-http`: startup fails with `stdio` or `sse`, and also
+when another variable below is set without `MCP_AUTH_ISSUER`, so a typo in the
+issuer cannot leave the endpoint open.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MCP_AUTH_ISSUER` | Unset (authentication disabled) | Issuer URL, exactly as in the tokens' `iss` claim; discovery is read from `<issuer>/.well-known/openid-configuration` |
+| `MCP_AUTH_AUDIENCE` | Required with `MCP_AUTH_ISSUER` | Value expected in the `aud` claim, usually the OAuth client ID |
+| `MCP_AUTH_REQUIRED_GROUP` | Unset (no group check) | Group required in the `groups` claim of the token, or of the userinfo response when the token has none |
+| `MCP_AUTH_USERNAME_CLAIM` | `preferred_username` | Claim naming the user, read from the token or the userinfo response; tokens without it are rejected |
+| `MCP_PUBLIC_URL` | Required with `MCP_AUTH_ISSUER` | Public base URL that clients use, such as `https://mcp.example.com`, without a path; never an internal address |
+
+A request without a valid token receives `401 Unauthorized` with a challenge that
+points to the protected resource metadata (RFC 9728):
+
+```text
+WWW-Authenticate: Bearer error="invalid_token", error_description="...", resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp"
+```
+
+That document, served by this server, names the resource
+(`https://mcp.example.com/mcp`) and the issuer as its authorization server; MCP
+clients follow it to start the OAuth flow. A reverse proxy in front of the server
+must forward both `/mcp` and `/.well-known/oauth-protected-resource/mcp`.
+
+The server never forwards the client's access token to Mealie. By default, tool
+calls still use `MEALIE_API_KEY`, so every authenticated user acts through that
+key's Mealie account; see
+[Acting as each user](#acting-as-each-user-mealie-reverse-proxy-sign-in) to call
+Mealie as each user instead. Rejected tokens are logged with a short reason code only, never the token.
+
+### Example: authentik and claude.ai
+
+1. In authentik, create an OAuth2/OpenID provider with client type
+   **Confidential** and strict redirect URIs
+   `https://claude.ai/api/mcp/auth_callback` and
+   `https://claude.com/api/mcp/auth_callback`.
+2. Select the scopes `openid`, `profile` (which carries `preferred_username` and
+   `groups`), and `offline_access` (refresh tokens).
+3. Keep the access token validity short, such as `minutes=10`. Group memberships
+   are frozen in the access token, so removing someone from the required group
+   takes effect only when their current token expires.
+4. Create an application for the provider and bind it to the group you require.
+5. Start the server with:
+
+   ```bash
+   export MCP_TRANSPORT=streamable-http
+   export MCP_HOST=0.0.0.0
+   export MCP_AUTH_ISSUER=https://auth.example.com/application/o/mealie-mcp/
+   export MCP_AUTH_AUDIENCE=<client ID>
+   export MCP_AUTH_REQUIRED_GROUP=mealie-mcp-users
+   export MCP_PUBLIC_URL=https://mcp.example.com
+   uv run mealie-mcp-server
+   ```
+
+6. In claude.ai, add a custom connector with the URL `https://mcp.example.com/mcp`
+   and enter the client ID and secret in its advanced settings.
+
+Start the server through the `mealie-mcp-server` entry point (or
+`uv run src/server.py`). The instance that `mcp run` and `mcp dev` discover has no
+token verifier, so it refuses to start when `MCP_AUTH_ISSUER` is set.
+
+### Acting as each user (Mealie reverse-proxy sign-in)
+
+By default, every authenticated user reaches Mealie through `MEALIE_API_KEY`.
+With `MEALIE_AUTH_MODE=reverse-proxy`, the server instead calls Mealie as the
+user behind each request, so recipes, meal plans, and shopping lists belong to
+that user's own Mealie account:
+
+1. The username is taken from the verified access token (the claim named by
+   `MCP_AUTH_USERNAME_CLAIM`).
+2. The server exchanges it for a Mealie token of that user through Mealie's
+   trusted reverse-proxy sign-in (`GET /api/auth/reverse-proxy` with the
+   username and shared-secret headers).
+3. Tool calls use that Mealie token. The identity provider's access token is
+   never forwarded to Mealie.
+
+This mode requires authentication (`MCP_AUTH_ISSUER`) and ignores
+`MEALIE_API_KEY`. Tool calls without an authenticated user fail; they never fall
+back to another account. A user without a Mealie account gets a readable tool
+error asking them to sign in to Mealie once in a browser.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MEALIE_AUTH_MODE` | `api-key` | `api-key` calls Mealie with `MEALIE_API_KEY`; `reverse-proxy` calls Mealie as each authenticated user and requires `MCP_AUTH_ISSUER` |
+| `MEALIE_REVERSE_PROXY_SECRET` | Required in `reverse-proxy` mode; refused (when non-blank) in `api-key` mode | Secret shared with Mealie's `REVERSE_PROXY_AUTH_SECRET` |
+| `MEALIE_REVERSE_PROXY_USER_HEADER` | `X-Forwarded-User` | Header carrying the username; must match Mealie's `REVERSE_PROXY_AUTH_HEADER` |
+| `MEALIE_REVERSE_PROXY_SECRET_HEADER` | `X-Mealie-Reverse-Proxy-Secret` | Header carrying the secret; must match Mealie's `REVERSE_PROXY_AUTH_SECRET_HEADER` |
+
+The three `MEALIE_REVERSE_PROXY_*` variables are refused when `MEALIE_AUTH_MODE` is
+`api-key` (blank counts as unset), so a typo in the mode cannot silently ignore them.
+
+Configure Mealie with:
+
+```bash
+REVERSE_PROXY_AUTH_ENABLED=true
+REVERSE_PROXY_AUTH_SIGNUP_ENABLED=false
+REVERSE_PROXY_AUTH_SECRET=<the same long random value as MEALIE_REVERSE_PROXY_SECRET>
+```
+
+Before enabling it:
+
+- The secret lets its holder act as **any** Mealie account. Generate a long random
+  value, store it as a secret, and never log or share it.
+- Block `/api/auth/reverse-proxy` on any public proxy in front of Mealie, so only
+  this server can reach the exchange route, for example through an internal
+  service address.
+- The username claim (`MCP_AUTH_USERNAME_CLAIM`, default `preferred_username`) is
+  trusted as the Mealie identity. It must be unique and set by an administrator,
+  never editable by users, and never an unverified email. Mealie matches the header
+  value against usernames and then emails, case-insensitively, so a user who can
+  change this claim can act as another account, including an admin.
+- With sign-up disabled, Mealie accounts are not created by this server: each
+  user signs in to the Mealie website once (for example through OIDC) before
+  using the tools.
+- Per-user Mealie clients are cached in memory (at most 256, least recently used
+  first out) and renewed before their Mealie token expires. Restarting the server
+  clears the cache.
 
 ## Docker
 

@@ -5,14 +5,34 @@ records the HTTP requests the mixins would make (method, url, json, params)
 and returns canned responses. No network access is required.
 """
 
+import json
+import time
 from copy import deepcopy
 
+import httpx
+import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 from mcp.server.fastmcp import FastMCP
 
+from mcp_auth import AuthConfig
 from mealie import MealieFetcher
 from mealie.client import MealieApiError
 from tools import register_all_tools
+
+# Variables of the authentication and reverse-proxy modes, cleared by the
+# server fixtures so the developer's environment never leaks into a test.
+AUTH_VARIABLES = (
+    "MCP_AUTH_ISSUER",
+    "MCP_AUTH_AUDIENCE",
+    "MCP_AUTH_REQUIRED_GROUP",
+    "MCP_AUTH_USERNAME_CLAIM",
+    "MCP_PUBLIC_URL",
+    "MEALIE_AUTH_MODE",
+    "MEALIE_REVERSE_PROXY_SECRET",
+    "MEALIE_REVERSE_PROXY_USER_HEADER",
+    "MEALIE_REVERSE_PROXY_SECRET_HEADER",
+)
 
 # A minimal but schema-valid recipe payload (satisfies the required Recipe
 # fields), used as the response to GET /api/recipes/<slug>.
@@ -279,3 +299,222 @@ def invoke(server):
         return content
 
     return _invoke
+
+
+class FakeOidc:
+    """In-memory OIDC provider: discovery, JWKS and userinfo over MockTransport."""
+
+    issuer = "https://auth.example/application/o/mealie-mcp/"
+    audience = "mealie-mcp-client"
+
+    def __init__(self, key):
+        self.discovery_url = (
+            self.issuer.rstrip("/") + "/.well-known/openid-configuration"
+        )
+        self.jwks_uri = "https://auth.example/application/o/mealie-mcp/jwks/"
+        self.userinfo_endpoint = "https://auth.example/application/o/userinfo/"
+        self.discovery_status = 200
+        self.userinfo = None
+        self.requests = []
+        self.keys = {}
+        self.current_kid = None
+        self.publish_key("k1", key)
+        self.transport = httpx.MockTransport(self._handle)
+
+    def publish_key(self, kid, key=None):
+        self.keys[kid] = key or rsa.generate_private_key(
+            public_exponent=65537, key_size=2048
+        )
+        self.current_kid = kid
+
+    def _jwks(self):
+        keys = []
+        for kid, key in self.keys.items():
+            jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(key.public_key()))
+            keys.append({**jwk, "kid": kid, "use": "sig", "alg": "RS256"})
+        return {"keys": keys}
+
+    def _handle(self, request):
+        self.requests.append(request)
+        url = str(request.url)
+        if url == self.discovery_url:
+            if self.discovery_status != 200:
+                return httpx.Response(self.discovery_status)
+            return httpx.Response(
+                200,
+                json={
+                    "issuer": self.issuer,
+                    "jwks_uri": self.jwks_uri,
+                    "userinfo_endpoint": self.userinfo_endpoint,
+                },
+            )
+        if url == self.jwks_uri:
+            return httpx.Response(200, json=self._jwks())
+        if url == self.userinfo_endpoint:
+            if self.userinfo is None:
+                return httpx.Response(401)
+            return httpx.Response(200, json=self.userinfo)
+        return httpx.Response(404)
+
+    def claims(self, **overrides):
+        now = int(time.time())
+        claims = {
+            "iss": self.issuer,
+            "aud": self.audience,
+            "sub": "sub-alice",
+            "iat": now,
+            "exp": now + 600,
+            "preferred_username": "alice",
+            "groups": ["mealie-users"],
+            **overrides,
+        }
+        return {k: v for k, v in claims.items() if v is not None}
+
+    def token(self, *, kid="k1", key=None, algorithm="RS256", **overrides):
+        headers = {"kid": kid} if kid is not None else {}
+        return jwt.encode(
+            self.claims(**overrides),
+            key or self.keys[self.current_kid],
+            algorithm=algorithm,
+            headers=headers,
+        )
+
+    def config(self, **overrides):
+        values = {
+            "issuer": self.issuer,
+            "audience": self.audience,
+            "public_url": "https://mcp.example",
+            "required_group": "mealie-users",
+            **overrides,
+        }
+        return AuthConfig(**values)
+
+    def count(self, url):
+        return sum(1 for r in self.requests if str(r.url) == url)
+
+
+@pytest.fixture(scope="session")
+def rsa_key():
+    return rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+
+@pytest.fixture
+def oidc(rsa_key):
+    return FakeOidc(rsa_key)
+
+
+class FakeMealie:
+    """In-memory Mealie HTTP API for tests that run the real `MealieFetcher`.
+
+    `install()` makes every `httpx.Client` use `transport`, so no request leaves
+    the process. Bearer values map to Mealie users through `tokens`; routes map
+    `(method, path)` to handlers. Unknown routes fail the test.
+    """
+
+    API_KEY = "api-key-marker"
+
+    def __init__(self):
+        self.secret = "proxy-secret-marker"
+        self.user_header = "X-Forwarded-User"
+        self.secret_header = "X-Mealie-Reverse-Proxy-Secret"
+        self.accounts = {"alice", "bob"}
+        self.expires_in = 172800
+        self.exchange_status: int | None = None
+        self.exchanges: list[httpx.Request] = []
+        self.issued: dict[str, str] = {}
+        self.rejected: set[str] = set()
+        self._counter = 0
+        self.health_status = 200
+        self.requests: list[httpx.Request] = []
+        self.clients: list[httpx.Client] = []
+        self.tokens = {self.API_KEY: "shared"}
+        self.routes = {
+            ("GET", "/api/app/about"): self._about,
+            ("GET", "/api/recipes"): self._recipes,
+            ("GET", "/api/auth/reverse-proxy"): self._exchange,
+        }
+        self.transport = httpx.MockTransport(self._handle)
+
+    def install(self, monkeypatch):
+        original = httpx.Client
+        fake = self
+
+        class RecordingClient(original):
+            def __init__(self, *args, **kwargs):
+                kwargs["transport"] = fake.transport
+                super().__init__(*args, **kwargs)
+                fake.clients.append(self)
+
+        monkeypatch.setattr(httpx, "Client", RecordingClient)
+
+    @staticmethod
+    def _bearer(request):
+        scheme, _, credentials = request.headers.get("authorization", "").partition(" ")
+        return credentials if scheme.lower() == "bearer" else None
+
+    def user(self, request):
+        """The Mealie user a request authenticates as, or None."""
+        user = self.tokens.get(self._bearer(request))
+        return None if user in self.rejected else user
+
+    def user_of(self, request):
+        """The owner of the bearer token, even if it was revoked or rejected."""
+        token = self._bearer(request)
+        return self.issued.get(token) or self.tokens.get(token)
+
+    def revoke(self, user):
+        """Invalidate the tokens already issued to `user`."""
+        for token, owner in list(self.tokens.items()):
+            if owner == user and token != self.API_KEY:
+                del self.tokens[token]
+
+    def reject_all(self, user):
+        """Make `/api/recipes` refuse every token of `user`, future ones included."""
+        self.rejected.add(user)
+
+    def _exchange(self, request):
+        self.exchanges.append(request)
+        if self.exchange_status is not None:
+            return httpx.Response(self.exchange_status)
+        user = request.headers.get(self.user_header)
+        if request.headers.get(self.secret_header) != self.secret or user not in self.accounts:
+            return httpx.Response(401, json={"detail": "Unauthorized"})
+        self._counter += 1
+        token = f"mealie-{user}-{self._counter}"
+        self.tokens[token] = user
+        self.issued[token] = user
+        return httpx.Response(
+            200,
+            json={
+                "access_token": token,
+                "token_type": "bearer",
+                "expires_in": self.expires_in,
+            },
+            headers={"Set-Cookie": f"mealie.access_token={token}; Path=/"},
+        )
+
+    def _handle(self, request):
+        self.requests.append(request)
+        handler = self.routes.get((request.method, request.url.path))
+        if handler is None:
+            raise AssertionError(
+                f"Unexpected Mealie request: {request.method} {request.url.path}"
+            )
+        return handler(request)
+
+    def _about(self, request):
+        return httpx.Response(self.health_status, json={"version": "v3.0.0"})
+
+    def _recipes(self, request):
+        user = self.user(request)
+        if user is None:
+            return httpx.Response(401, json={"detail": "Not authenticated"})
+        return httpx.Response(
+            200,
+            json={
+                "items": [{"id": "r1", "name": f"{user} recipe"}],
+                "page": 1,
+                "perPage": 50,
+                "total": 1,
+            },
+        )

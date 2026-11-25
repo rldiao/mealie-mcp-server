@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import runpy
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -11,12 +12,28 @@ import anyio
 import httpx
 import pytest
 
+from conftest import AUTH_VARIABLES
+from mcp_auth import AuthConfig
+from mealie.reverse_proxy import ReverseProxyConfig
+
+AUTH_ENV = {
+    "MCP_TRANSPORT": "streamable-http",
+    "MCP_AUTH_ISSUER": "https://auth.example/o/app/",
+    "MCP_AUTH_AUDIENCE": "client",
+    "MCP_PUBLIC_URL": "https://mcp.example",
+}
+RP_ENV = {
+    **AUTH_ENV,
+    "MEALIE_AUTH_MODE": "reverse-proxy",
+    "MEALIE_REVERSE_PROXY_SECRET": "secret-marker",
+}
+
 
 @pytest.fixture
 def load_server(monkeypatch, request):
     monkeypatch.setenv("MEALIE_BASE_URL", "http://mealie.invalid")
     monkeypatch.setenv("MEALIE_API_KEY", "test-placeholder")
-    for name in ("MCP_TRANSPORT", "MCP_HOST", "MCP_PORT", "MEALIE_ENABLE_AI_IMPORT"):
+    for name in ("MCP_TRANSPORT", "MCP_HOST", "MCP_PORT", "MEALIE_ENABLE_AI_IMPORT", *AUTH_VARIABLES):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr("dotenv.load_dotenv", lambda: None)
 
@@ -363,3 +380,168 @@ async def test_http_sessions_initialize_list_and_call_tools(load_server, monkeyp
     assert sum(req.url.path == "/api/app/about" for req in requests) == 1
     factory.assert_called_once()
     assert mealie_client.is_closed
+
+
+def test_sdk_advertises_rfc9728_resource_metadata_path():
+    from mcp.server.auth.routes import build_resource_metadata_url
+    from pydantic import AnyHttpUrl
+
+    url = build_resource_metadata_url(AnyHttpUrl("https://mcp.example/mcp"))
+    assert str(url) == "https://mcp.example/.well-known/oauth-protected-resource/mcp"
+
+
+@pytest.mark.parametrize(
+    ("env", "message"),
+    [
+        ({**AUTH_ENV, "MCP_AUTH_AUDIENCE": ""}, "MCP_AUTH_AUDIENCE"),
+        ({**AUTH_ENV, "MCP_PUBLIC_URL": ""}, "MCP_PUBLIC_URL"),
+        ({**AUTH_ENV, "MCP_PUBLIC_URL": "https://mcp.example/mcp"}, "MCP_PUBLIC_URL"),
+        ({**AUTH_ENV, "MCP_PUBLIC_URL": "mcp.example"}, "MCP_PUBLIC_URL"),
+        ({**AUTH_ENV, "MCP_AUTH_ISSUER": "not-a-url"}, "MCP_AUTH_ISSUER"),
+        ({**AUTH_ENV, "MCP_AUTH_USERNAME_CLAIM": " "}, "MCP_AUTH_USERNAME_CLAIM"),
+        ({**AUTH_ENV, "MCP_TRANSPORT": "stdio"}, "MCP_TRANSPORT"),
+        ({**AUTH_ENV, "MCP_TRANSPORT": "sse"}, "MCP_TRANSPORT"),
+        ({"MCP_AUTH_AUDIENCE": "client"}, "MCP_AUTH_ISSUER"),
+        ({"MCP_PUBLIC_URL": "https://mcp.example"}, "MCP_AUTH_ISSUER"),
+    ],
+)
+def test_invalid_auth_configuration_fails_before_http_allocation(load_server, monkeypatch, env, message):
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    server, _, requests, factory = load_server()
+    with pytest.raises(ValueError, match=message) as error:
+        server["main"]()
+    assert "auth.example" not in str(error.value) and "mcp.example" not in str(error.value)
+    assert requests == []
+    factory.assert_not_called()
+
+
+def test_auth_configuration_is_parsed(load_server, monkeypatch):
+    for name, value in {**AUTH_ENV, "MCP_PUBLIC_URL": "https://mcp.example/"}.items():
+        monkeypatch.setenv(name, value)
+    server, _, requests, factory = load_server()
+    config = server["ServerConfig"].from_environment()
+    assert config.auth == AuthConfig(
+        "https://auth.example/o/app/", "client", "https://mcp.example", None, "preferred_username"
+    )
+    assert config.auth.resource_url == "https://mcp.example/mcp"
+    assert requests == []
+    factory.assert_not_called()
+
+
+def test_no_auth_variables_keep_current_behaviour(load_server):
+    server, _, _, _ = load_server()
+    assert server["ServerConfig"].from_environment().auth is None
+    assert server["ServerConfig"]("http://mealie.invalid", "placeholder").auth is None
+
+
+async def test_import_time_instance_refuses_auth_configuration(load_server, monkeypatch):
+    for name, value in AUTH_ENV.items():
+        monkeypatch.setenv(name, value)
+    namespace, _, requests, factory = load_server()
+    with pytest.raises(ValueError, match="MCP_AUTH_ISSUER"):
+        async with server_lifespan(namespace["mcp"], "streamable-http"):
+            pytest.fail("must not serve without authentication")
+    factory.assert_not_called()
+    assert requests == []
+
+
+@pytest.mark.parametrize(
+    ("env", "message"),
+    [
+        ({"MEALIE_AUTH_MODE": "proxy"}, "MEALIE_AUTH_MODE"),
+        (
+            {
+                "MEALIE_AUTH_MODE": "reverse-proxy",
+                "MEALIE_REVERSE_PROXY_SECRET": "secret-marker",
+                "MCP_TRANSPORT": "streamable-http",
+            },
+            "MCP_AUTH_ISSUER",
+        ),
+        ({**RP_ENV, "MEALIE_REVERSE_PROXY_SECRET": ""}, "MEALIE_REVERSE_PROXY_SECRET"),
+        ({**RP_ENV, "MEALIE_REVERSE_PROXY_USER_HEADER": " "}, "MEALIE_REVERSE_PROXY_USER_HEADER"),
+        (
+            {**RP_ENV, "MEALIE_REVERSE_PROXY_SECRET_HEADER": " "},
+            "MEALIE_REVERSE_PROXY_SECRET_HEADER",
+        ),
+    ],
+)
+def test_invalid_reverse_proxy_configuration_fails_before_http_allocation(
+    load_server, monkeypatch, env, message
+):
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    server, _, requests, factory = load_server()
+    with pytest.raises(ValueError, match=message) as error:
+        server["main"]()
+    assert "auth.example" not in str(error.value) and "mcp.example" not in str(error.value)
+    assert "secret-marker" not in str(error.value)
+    assert requests == []
+    factory.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "variable",
+    [
+        "MEALIE_REVERSE_PROXY_SECRET",
+        "MEALIE_REVERSE_PROXY_USER_HEADER",
+        "MEALIE_REVERSE_PROXY_SECRET_HEADER",
+    ],
+)
+def test_orphan_reverse_proxy_variables_fail_in_api_key_mode(load_server, monkeypatch, variable):
+    monkeypatch.setenv(variable, "secret-marker")
+    server, _, requests, factory = load_server()
+    with pytest.raises(ValueError, match="MEALIE_AUTH_MODE") as error:
+        server["main"]()
+    assert "secret-marker" not in str(error.value)
+    assert requests == []
+    factory.assert_not_called()
+
+
+def test_blank_reverse_proxy_variables_are_ignored_in_api_key_mode(load_server, monkeypatch):
+    monkeypatch.setenv("MEALIE_REVERSE_PROXY_SECRET", "  ")
+    server, _, _, _ = load_server()
+    assert server["ServerConfig"].from_environment().mealie_auth_mode == "api-key"
+
+
+def test_reverse_proxy_configuration_without_api_key(load_server, monkeypatch):
+    for name, value in RP_ENV.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("MEALIE_API_KEY")
+    server, _, requests, factory = load_server()
+    config = server["ServerConfig"].from_environment()
+    assert config.mealie_auth_mode == "reverse-proxy" and config.api_key is None
+    assert config.reverse_proxy == ReverseProxyConfig("secret-marker")
+    assert "secret-marker" not in repr(config)
+    assert requests == []
+    factory.assert_not_called()
+
+
+def test_reverse_proxy_headers_are_configurable(load_server, monkeypatch):
+    env = {
+        **RP_ENV,
+        "MEALIE_REVERSE_PROXY_USER_HEADER": " Remote-User ",
+        "MEALIE_REVERSE_PROXY_SECRET_HEADER": "X-Proxy-Secret",
+    }
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    server, _, _, _ = load_server()
+    config = server["ServerConfig"].from_environment()
+    assert config.reverse_proxy == ReverseProxyConfig(
+        "secret-marker", "Remote-User", "X-Proxy-Secret"
+    )
+
+
+def test_api_key_mode_is_the_default(load_server):
+    server, _, _, _ = load_server()
+    config = server["ServerConfig"].from_environment()
+    assert config.mealie_auth_mode == "api-key"
+    assert config.reverse_proxy is None
+
+
+def test_readme_documents_every_environment_variable():
+    source = "\n".join(p.read_text(encoding="utf-8") for p in Path("src").rglob("*.py"))
+    names = set(re.findall(r'os\.getenv\(\s*"([A-Z0-9_]+)"', source))
+    readme = Path("README.md").read_text(encoding="utf-8")
+    assert {"MCP_AUTH_ISSUER", "MCP_PUBLIC_URL"} <= names
+    assert sorted(n for n in names if f"`{n}`" not in readme) == []

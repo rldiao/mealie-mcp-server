@@ -17,9 +17,38 @@ class MealieApiError(Exception):
         super().__init__(f"{message} (Status Code: {status_code})")
 
 
+def log_failure(operation: str, error: BaseException) -> None:
+    """Log the type and status of a failure, never its content."""
+    metadata = {"operation": operation, "error_type": type(error).__name__}
+    if isinstance(error, httpx.HTTPStatusError):
+        metadata["status_code"] = error.response.status_code
+    logger.error(metadata)
+
+
+def check_mealie_health(http: httpx.Client) -> None:
+    """Fail unless Mealie answers its health endpoint; the caller closes `http`."""
+    try:
+        response = http.get("/api/app/about")
+        response.raise_for_status()
+    except BaseException as error:
+        log_failure("Checking Mealie health", error)
+        if isinstance(error, httpx.HTTPStatusError):
+            raise httpx.HTTPStatusError(
+                "Mealie API health check failed",
+                request=error.request,
+                response=error.response,
+            ) from None
+        if isinstance(error, httpx.TimeoutException):
+            raise TimeoutError("Mealie API health check timed out") from None
+        if isinstance(error, httpx.RequestError):
+            raise ConnectionError("Could not connect to the Mealie API") from None
+        raise
+    logger.info({"operation": "Connected to Mealie API"})
+
+
 class MealieClient:
 
-    def __init__(self, base_url: str, api_key: str):
+    def __init__(self, base_url: str, api_key: str, *, check_health: bool = True):
         if not base_url:
             raise ValueError("Base URL cannot be empty")
         if not api_key:
@@ -34,31 +63,16 @@ class MealieClient:
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=30.0,
         )
-        try:
-            response = self._client.get("/api/app/about")
-            response.raise_for_status()
-        except BaseException as error:
-            self._client.close()
-            self._log_failure("Checking Mealie health", error)
-            if isinstance(error, httpx.HTTPStatusError):
-                raise httpx.HTTPStatusError(
-                    "Mealie API health check failed",
-                    request=error.request,
-                    response=error.response,
-                ) from None
-            if isinstance(error, httpx.TimeoutException):
-                raise TimeoutError("Mealie API health check timed out") from None
-            if isinstance(error, httpx.RequestError):
-                raise ConnectionError("Could not connect to the Mealie API") from None
-            raise
-        logger.info({"operation": "Connected to Mealie API"})
+        if check_health:
+            try:
+                check_mealie_health(self._client)
+            except BaseException:
+                self._client.close()
+                raise
 
     @staticmethod
     def _log_failure(operation: str, error: BaseException) -> None:
-        metadata = {"operation": operation, "error_type": type(error).__name__}
-        if isinstance(error, httpx.HTTPStatusError):
-            metadata["status_code"] = error.response.status_code
-        logger.error(metadata)
+        log_failure(operation, error)
 
     def _handle_request(self, method: str, url: str, **kwargs) -> Dict[str, Any] | str:
         """Common request handler with error handling for all API calls.
