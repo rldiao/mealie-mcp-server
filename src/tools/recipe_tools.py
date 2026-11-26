@@ -374,8 +374,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
           Mealie unit/food (by id and name), and a referenceId for step links.
         - An instruction string is the step text; an instruction object can
           also carry a summary (heading shown in place of "Step N"), a title
-          (section banner above the step), and ingredientReferences for
-          cook-mode highlights.
+          (section banner above the step), ingredientReferences for
+          cook-mode highlights, and durationSeconds for a step timer
+          (Mealie 3.30+).
 
         Args:
             name: The name of the new recipe.

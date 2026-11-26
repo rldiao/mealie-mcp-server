@@ -55,6 +55,7 @@ class RecipeInstruction(BaseModel):
     summary: Optional[str] = None
     text: str
     ingredientReferences: List[IngredientReference] = Field(default_factory=list)
+    durationSeconds: Optional[int] = None
 
 
 class RecipeNutrition(BaseModel):
@@ -279,6 +280,17 @@ class RecipeInstructionInput(BaseModel):
             "referenceId set on those ingredients (Mealie requires UUID v4 here; "
             "non-v4 values are converted to a stable UUID v4 server-side). "
             "Enables Mealie's cook-mode highlighting."
+        ),
+    )
+    durationSeconds: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=2147483647,
+        description=(
+            "Timer for this step in whole seconds, e.g. 900 for 15 minutes. "
+            "Requires Mealie 3.30 or later. Instruction lists replace the whole "
+            "collection, so copy durationSeconds from get_recipe to keep an "
+            "existing step timer."
         ),
     )
 

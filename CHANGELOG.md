@@ -28,6 +28,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Instruction steps accept `durationSeconds`, Mealie's per-step timer (added in
+  Mealie 3.30). `create_recipe` and `update_recipe` forward it, and recipe reads
+  include it. Previously a step timer was dropped whenever `update_recipe`
+  replaced the instruction list; copy `durationSeconds` from `get_recipe` to keep
+  existing timers when rewriting steps. Values must be whole seconds of at least 1.
 - `create_recipe` and `update_recipe` accept a `nutrition` argument covering
   Mealie's full key set (calories, macros, cholesterol, sodium, sugars, and the
   fat breakdown). Numbers are converted to the strings Mealie stores. Mealie
