@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
+from pydantic import AnyHttpUrl, TypeAdapter
 
 from mealie import MealieFetcher
 from models.recipe import (
@@ -17,6 +18,7 @@ from models.recipe import (
     RecipeIngredientInput,
     RecipeInstruction,
     RecipeInstructionInput,
+    RecipeNote,
     RecipeNutrition,
     RecipeSettingsInput,
 )
@@ -28,8 +30,7 @@ def _build_ingredient(
 ) -> RecipeIngredient:
     """Coerce a flat string or structured ingredient into a RecipeIngredient.
 
-    A plain string becomes a note for Mealie's natural-language parser to
-    resolve; a structured object maps its fields straight onto the Mealie
+    A plain string is stored as a note without implicit parsing; a structured object maps its fields straight onto the Mealie
     RecipeIngredient model.
     """
     if isinstance(ingredient, str):
@@ -112,6 +113,12 @@ def _require_text(value: str, label: str) -> None:
         raise ValueError(f"{label} cannot be empty")
 
 
+def _note_payload(note: RecipeNote) -> Dict[str, str]:
+    """Serialize a note, rejecting an empty body before any request."""
+    _require_text(note.text, "Note text")
+    return {"title": note.title, "text": note.text}
+
+
 def _recipe_changes(
     *,
     ingredients: Optional[List[Union[str, RecipeIngredientInput]]] = None,
@@ -120,6 +127,7 @@ def _recipe_changes(
     tools: Optional[List[OrganizerRef]] = None,
     nutrition: Optional[RecipeNutrition] = None,
     settings: Optional[RecipeSettingsInput] = None,
+    notes: Optional[List[RecipeNote]] = None,
     **fields: Any,
 ) -> Dict[str, Any]:
     """Validate and serialize caller content before any creation request."""
@@ -137,6 +145,11 @@ def _recipe_changes(
     changes = {
         field_names[key]: value for key, value in fields.items() if value is not None
     }
+    # Mealie 3.29 displays structured duration and free text together. An explicit
+    # text replacement must clear only that duration; unrelated times stay intact.
+    for field in ("totalTime", "prepTime", "performTime"):
+        if field in changes:
+            changes[field + "Seconds"] = None
     if "name" in changes:
         _require_text(changes["name"], "Recipe name")
     if "recipeServings" in changes and not math.isfinite(changes["recipeServings"]):
@@ -146,11 +159,12 @@ def _recipe_changes(
     _normalize_references(built_ingredients, built_instructions)
     if ingredients is not None:
         changes["recipeIngredient"] = [
-            i.model_dump(exclude_none=True) for i in built_ingredients
+            i.model_dump(exclude_none=True, exclude_unset=True, exclude={"display"})
+            for i in built_ingredients
         ]
     if instructions is not None:
         changes["recipeInstructions"] = [
-            i.model_dump(exclude_none=True) for i in built_instructions
+            i.model_dump(exclude_none=True, exclude_unset=True) for i in built_instructions
         ]
     if tags is not None:
         changes["tags"] = [_organizer_payload(t) for t in tags]
@@ -160,6 +174,8 @@ def _recipe_changes(
         changes["nutrition"] = nutrition.model_dump(exclude_none=True)
     if settings is not None:
         changes["settings"] = settings.model_dump(exclude_none=True)
+    if notes is not None:
+        changes["notes"] = [_note_payload(n) for n in notes]
     return changes
 
 
@@ -184,7 +200,7 @@ def _created_recipe_stage(slug: str, stage: str):
     try:
         with tool_error_boundary("Error completing created recipe"):
             yield
-    except ToolError:
+    except ToolError as error:
         raise ToolError(
             json.dumps(
                 {
@@ -194,6 +210,7 @@ def _created_recipe_stage(slug: str, stage: str):
                     ),
                     "created_slug": slug,
                     "stage": stage,
+                    "detail": str(error),
                 }
             )
         ) from None
@@ -207,7 +224,7 @@ def _create_populated_recipe(
 ) -> Dict[str, Any]:
     _require_text(name, "Recipe name")
     if image_url is not None:
-        _require_text(image_url, "Image URL")
+        TypeAdapter(AnyHttpUrl).validate_python(image_url)
     slug = mealie.create_recipe(name)
     with _created_recipe_stage(slug, "fetch"):
         current = mealie.get_recipe(slug)
@@ -282,7 +299,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             recipe_json = mealie.get_recipe(slug)
             if not concise:
                 return recipe_json
-            recipe = Recipe.model_validate(recipe_json)
+            recipe = Recipe.model_validate(
+                {**recipe_json, "lastMade": mealie.get_recipe_last_made(slug)}
+            )
             return recipe.model_dump(
                 include={
                     "name",
@@ -291,6 +310,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                     "recipeYieldQuantity",
                     "recipeYield",
                     "totalTime",
+                    "totalTimeSeconds",
+                    "prepTimeSeconds",
+                    "performTimeSeconds",
                     "rating",
                     "orgURL",
                     "tags",
@@ -356,6 +378,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         tools: Optional[List[OrganizerRef]] = None,
         nutrition: Optional[RecipeNutrition] = None,
         settings: Optional[RecipeSettingsInput] = None,
+        notes: Optional[List[RecipeNote]] = None,
     ) -> Dict[str, Any]:
         """Create a recipe and populate all of its content in one call.
 
@@ -368,20 +391,21 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Ingredients and instructions each accept either a plain string or a
         structured object:
 
-        - An ingredient string (e.g. "200 g basmati rice") is resolved by
-          Mealie's natural-language parser into quantity/unit/food.
+        - An ingredient string (e.g. "200 g basmati rice") is stored as a text
+          note. Use parse_ingredients explicitly for quantity/unit/food.
         - An ingredient object can set quantity, note, title, an existing
           Mealie unit/food (by id and name), and a referenceId for step links.
         - An instruction string is the step text; an instruction object can
           also carry a summary (heading shown in place of "Step N"), a title
-          (section banner above the step), and ingredientReferences for
-          cook-mode highlights.
+          (section banner above the step), ingredientReferences for
+          cook-mode highlights, and durationSeconds for a step timer
+          (Mealie 3.30+).
 
         Args:
             name: The name of the new recipe.
             description: Recipe description.
             org_url: Source URL for the recipe (shown as a link in the Mealie UI).
-            total_time: Total time as free text, e.g. "35 min" or ISO-8601 "PT35M".
+            total_time: Total time as free text, e.g. "35 min".
             prep_time: Preparation time, same format as total_time.
             cook_time: Cooking time, same format as total_time.
             perform_time: Hands-on/active time, same format as total_time.
@@ -398,6 +422,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 toggles you pass are changed; the rest keep the defaults Mealie
                 seeds from the household preferences. Set showAssets here when
                 you know you are about to attach a file.
+            notes: Recipe notes (tips, substitutions, storage advice), each a
+                text with an optional title.
 
         Returns:
             Dict[str, Any]: The created recipe details.
@@ -421,6 +447,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 tools=tools,
                 nutrition=nutrition,
                 settings=settings,
+                notes=notes,
             )
             return _create_populated_recipe(mealie, name, changes, image_url)
 
@@ -442,13 +469,15 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         settings: Optional[RecipeSettingsInput] = None,
         ingredients: Optional[List[Union[str, RecipeIngredientInput]]] = None,
         instructions: Optional[List[Union[str, RecipeInstructionInput]]] = None,
+        notes: Optional[List[RecipeNote]] = None,
     ) -> Dict[str, Any]:
         """Partially update a recipe (only updates provided fields).
 
         Omitted or null fields are unchanged. Provided ingredient/instruction
         lists replace those fields; empty lists clear them. Content changes use
         a read-merge-write to preserve other recipe fields; metadata-only changes
-        use PATCH.
+        use PATCH. Setting total_time, prep_time, or perform_time clears the
+        corresponding structured duration in Mealie 3.29 and later.
 
         Args:
             slug: The unique text identifier for the recipe to be updated.
@@ -456,7 +485,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             description: New description for the recipe.
             recipe_yield: Yield as free text, e.g. "4 Portionen".
             servings: Number of servings (numeric).
-            total_time: Total time as free text, e.g. "35 min" or ISO-8601 "PT35M".
+            total_time: Total time as free text, e.g. "35 min".
             prep_time: Preparation time, same format as total_time.
             cook_time: Cooking time, same format as total_time.
             perform_time: Hands-on/active time, same format as total_time.
@@ -476,6 +505,10 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 create_recipe. Replaces the ingredient list when provided.
             instructions: Step strings and/or structured objects, as in
                 create_recipe. Replaces the instruction list when provided.
+            notes: Recipe notes, each a text with an optional title. Replaces
+                the whole note list when provided (an empty list clears it), so
+                include the existing notes you want to keep; read them with
+                get_recipe. To append a single note, use add_recipe_note.
 
         Returns:
             Dict[str, Any]: The updated recipe details.
@@ -497,6 +530,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 settings=settings,
                 ingredients=ingredients,
                 instructions=instructions,
+                notes=notes,
             )
             if not recipe_data:
                 raise ValueError("At least one field must be provided to update")
@@ -515,6 +549,28 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                 }
 
             return mealie.patch_recipe(slug, recipe_data)
+
+    @mcp.tool()
+    def add_recipe_note(slug: str, text: str, title: str = "") -> Dict[str, Any]:
+        """Append one note to a recipe, keeping its existing notes.
+
+        Use for adding a tip, substitution, or storage advice without having to
+        resend the other notes. To edit, reorder, or delete notes, pass the
+        complete list to update_recipe instead.
+
+        Args:
+            slug: The unique text identifier for the recipe.
+            text: The note body. Markdown is rendered by Mealie.
+            title: Optional heading for the note, e.g. "Storage".
+
+        Returns:
+            Dict[str, Any]: The updated recipe details.
+        """
+        with tool_error_boundary("Error adding recipe note"):
+            _require_text(slug, "Recipe slug")
+            note = _note_payload(RecipeNote(title=title, text=text))
+            current = mealie.get_recipe(slug).get("notes") or []
+            return mealie.patch_recipe(slug, {"notes": [*current, note]})
 
     @mcp.tool()
     def duplicate_recipe(slug: str, name: Optional[str] = None) -> Dict[str, Any]:

@@ -25,6 +25,8 @@ def load_server(monkeypatch, request):
 
         def respond(api_request):
             requests.append(api_request)
+            if api_request.url.path == "/api/users/self":
+                return httpx.Response(200, json={"admin": False}, request=api_request)
             if api_request.url.path == "/api/app/about":
                 return httpx.Response(health_status, json={})
             assert api_request.url.path == "/api/recipes"
@@ -194,12 +196,12 @@ async def test_ai_import_lazy_runtime_registration(load_server, monkeypatch, val
     monkeypatch.setenv("MEALIE_ENABLE_AI_IMPORT", value)
     namespace, _, requests, factory = load_server()
     mcp = namespace["mcp"]
-    assert len(await mcp.list_tools()) == 61
+    assert len(await mcp.list_tools()) == 62
     factory.assert_not_called()
     assert requests == []
     async with server_lifespan(mcp, transport):
         tools = await mcp.list_tools()
-        assert len(tools) == (62 if enabled else 61)
+        assert len(tools) == (63 if enabled else 62)
         assert ("import_recipe_with_ai" in {t.name for t in tools}) is enabled
         async with mcp.settings.lifespan(mcp):
             assert len(await mcp.list_tools()) == len(tools)
@@ -211,7 +213,7 @@ async def test_ai_import_explicit_configuration_discovery(load_server, enabled):
     namespace, _, requests, factory = load_server()
     config = namespace["ServerConfig"]("http://mealie.invalid", "placeholder", enable_ai_import=enabled)
     mcp = namespace["create_server"](config)
-    assert len(await mcp.list_tools()) == (62 if enabled else 61)
+    assert len(await mcp.list_tools()) == (63 if enabled else 62)
     factory.assert_not_called()
     assert requests == []
 
@@ -235,7 +237,7 @@ async def test_ai_import_main_registration(load_server, monkeypatch, transport):
     with patch.object(namespace["FastMCP"], "run", autospec=True) as run:
         namespace["main"]()
     mcp = run.call_args.args[0]
-    assert len(await mcp.list_tools()) == 62
+    assert len(await mcp.list_tools()) == 63
 
 
 @pytest.mark.parametrize(
@@ -289,13 +291,14 @@ def test_main_health_failure_raises_before_http_runner(load_server, monkeypatch)
 
 @pytest.mark.parametrize("enable_ai_import", [False, True])
 async def test_http_sessions_initialize_list_and_call_tools(load_server, monkeypatch, enable_ai_import):
-    # sse-starlette's global event must not retain a previous test's event loop.
-    monkeypatch.setattr("sse_starlette.sse.AppStatus.should_exit_event", None)
+    # sse-starlette < 3 kept shutdown state in a process-global event. Newer
+    # releases removed that attribute, so there is nothing to reset there.
+    monkeypatch.setattr(
+        "sse_starlette.sse.AppStatus.should_exit_event", None, raising=False
+    )
     monkeypatch.setenv("MEALIE_ENABLE_AI_IMPORT", str(enable_ai_import).lower())
     server, mealie_client, requests, factory = load_server()
     app = server["mcp"].streamable_http_app()
-    session_ids = set()
-
     async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
@@ -319,10 +322,7 @@ async def test_http_sessions_initialize_list_and_call_tools(load_server, monkeyp
                 )
                 assert response.status_code == 200
                 assert '"name":"mealie"' in response.text
-                session_id = response.headers["mcp-session-id"]
-                assert session_id not in session_ids
-                session_ids.add(session_id)
-                headers["Mcp-Session-Id"] = session_id
+                assert "mcp-session-id" not in response.headers
 
                 response = await client.post(
                     "/mcp",

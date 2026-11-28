@@ -84,6 +84,36 @@ def test_recipe_instruction_input_serialisation():
     assert step.ingredientReferences[0].referenceId == "r1"
 
 
+def test_instruction_reads_step_duration():
+    r = Recipe.model_validate(
+        {
+            **BASE_RECIPE,
+            "recipeInstructions": [
+                {"text": "Simmer", "durationSeconds": 900},
+                {"text": "Serve", "durationSeconds": None},
+            ],
+        }
+    )
+    assert r.recipeInstructions[0].durationSeconds == 900
+    assert r.recipeInstructions[1].durationSeconds is None
+
+
+def test_recipe_instruction_input_carries_duration():
+    dumped = RecipeInstructionInput(text="Simmer", durationSeconds=900).model_dump(
+        exclude_none=True
+    )
+    assert dumped["durationSeconds"] == 900
+    assert "durationSeconds" not in RecipeInstructionInput(text="Serve").model_dump(
+        exclude_none=True
+    )
+
+
+@pytest.mark.parametrize("value", [0, -60, 1.5, 2147483648, "ten minutes"])
+def test_recipe_instruction_input_rejects_invalid_duration(value):
+    with pytest.raises(ValidationError):
+        RecipeInstructionInput(text="Simmer", durationSeconds=value)
+
+
 def test_recipe_instruction_input_carries_summary():
     step = RecipeInstructionInput(text="Do it", summary="Prep")
     dumped = step.model_dump(exclude_none=True)
