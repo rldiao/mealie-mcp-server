@@ -1,3 +1,4 @@
+from .client import path_segment
 import logging
 import re
 from typing import Any, Dict, List, Optional
@@ -111,6 +112,7 @@ class RecipeMixin:
         Returns:
             JSON response containing all recipe details
         """
+        slug = path_segment(slug)
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
 
@@ -138,6 +140,7 @@ class RecipeMixin:
         Returns:
             JSON response containing the updated recipe details
         """
+        slug = path_segment(slug)
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
         if not recipe_data:
@@ -285,6 +288,7 @@ class RecipeMixin:
         Returns:
             JSON response containing the updated recipe details
         """
+        slug = path_segment(slug)
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
         if not recipe_data:
@@ -303,6 +307,7 @@ class RecipeMixin:
         Returns:
             JSON response containing the updated recipe details
         """
+        slug = path_segment(slug)
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
 
@@ -320,6 +325,7 @@ class RecipeMixin:
         Returns:
             JSON response containing the updated recipe details
         """
+        slug = path_segment(slug)
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
 
@@ -343,11 +349,14 @@ class RecipeMixin:
         Returns:
             JSON response containing the updated recipe details
         """
+        slug = path_segment(slug)
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
         if category_ids is None and tag_ids is None:
             raise ValueError("At least one of category_ids or tag_ids must be provided")
 
+        for identifier in (category_ids or []) + (tag_ids or []):
+            path_segment(identifier)
         logger.info({"message": "Setting recipe categories and tags"})
         recipe_data = {}
         if category_ids is not None:
@@ -366,6 +375,7 @@ class RecipeMixin:
         Returns:
             JSON response containing the newly created duplicate recipe
         """
+        slug = path_segment(slug)
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
 
@@ -386,6 +396,7 @@ class RecipeMixin:
         Returns:
             JSON response containing the updated recipe
         """
+        slug = path_segment(slug)
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
 
@@ -416,6 +427,7 @@ class RecipeMixin:
         if not image_url:
             raise ValueError("Image URL cannot be empty")
 
+        slug = path_segment(slug)
         payload = {"url": image_url}
 
         logger.info({"message": "Scraping recipe image from URL"})
@@ -439,6 +451,7 @@ class RecipeMixin:
         Returns:
             JSON response confirming the image was uploaded
         """
+        slug = path_segment(slug)
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
         if not image_data:
@@ -477,6 +490,7 @@ class RecipeMixin:
         Returns:
             JSON response containing the uploaded asset details
         """
+        slug = path_segment(slug)
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
         if not asset_data:
@@ -503,6 +517,7 @@ class RecipeMixin:
         Returns:
             JSON response confirming deletion
         """
+        slug = path_segment(slug)
         if not slug:
             raise ValueError("Recipe slug cannot be empty")
 

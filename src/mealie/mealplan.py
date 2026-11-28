@@ -1,3 +1,4 @@
+from .client import path_segment
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -91,7 +92,7 @@ class MealplanMixin:
         self, entry_id: int | str, entry_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Update an entry while preserving fields required by Mealie's PUT."""
-        entry_id = "" if entry_id is None else str(entry_id).strip()
+        entry_id = path_segment(entry_id)
         if not entry_id:
             raise ValueError("Mealplan entry ID cannot be empty")
         patch = MealPlanUpdate.model_validate(entry_data).model_dump(
@@ -126,7 +127,7 @@ class MealplanMixin:
             ValueError: If item_id is empty
             MealieApiError: If the API request fails
         """
-        item_id = "" if item_id is None else str(item_id).strip()
+        item_id = path_segment(item_id)
         if not item_id:
             raise ValueError("Mealplan entry ID cannot be empty")
 

@@ -1,3 +1,4 @@
+from .client import path_segment
 import logging
 from typing import Any, Dict, Optional
 
@@ -81,6 +82,7 @@ class UnitsMixin:
         Returns:
             JSON response containing the unit details
         """
+        unit_id = path_segment(unit_id)
         if not unit_id:
             raise ValueError("Unit ID cannot be empty")
 
@@ -102,6 +104,7 @@ class UnitsMixin:
         Returns:
             JSON response containing the updated unit
         """
+        unit_id = path_segment(unit_id)
         if not unit_id:
             raise ValueError("Unit ID cannot be empty")
         if not unit_data:
@@ -122,6 +125,7 @@ class UnitsMixin:
         Returns:
             JSON response confirming deletion
         """
+        unit_id = path_segment(unit_id)
         if not unit_id:
             raise ValueError("Unit ID cannot be empty")
 

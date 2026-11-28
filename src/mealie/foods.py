@@ -1,3 +1,4 @@
+from .client import path_segment
 import logging
 from typing import Any, Dict, Optional
 
@@ -86,6 +87,7 @@ class FoodsMixin:
         Returns:
             JSON response containing the food details
         """
+        food_id = path_segment(food_id)
         if not food_id:
             raise ValueError("Food ID cannot be empty")
 
@@ -107,6 +109,7 @@ class FoodsMixin:
         Returns:
             JSON response containing the updated food
         """
+        food_id = path_segment(food_id)
         if not food_id:
             raise ValueError("Food ID cannot be empty")
         if not food_data:
@@ -127,6 +130,7 @@ class FoodsMixin:
         Returns:
             JSON response confirming deletion
         """
+        food_id = path_segment(food_id)
         if not food_id:
             raise ValueError("Food ID cannot be empty")
 
