@@ -103,6 +103,61 @@ async def test_create_recipe_forwards_instruction_summary(invoke, fetcher):
     assert steps[1]["title"] == "On the stove"
 
 
+async def test_create_recipe_forwards_step_duration(invoke, fetcher):
+    await invoke(
+        "create_recipe",
+        name="Timers",
+        instructions=[
+            {"text": "Simmer the sauce.", "durationSeconds": 900},
+            {"text": "Serve."},
+        ],
+    )
+    steps = fetcher.last("PUT", "/api/recipes/")["json"]["recipeInstructions"]
+
+    assert steps[0]["durationSeconds"] == 900
+    # a step without a timer sends no durationSeconds key at all
+    assert "durationSeconds" not in steps[1]
+
+
+async def test_update_recipe_forwards_step_duration(invoke, fetcher):
+    fetcher.recipe["recipeInstructions"] = [
+        {"text": "Simmer the sauce.", "durationSeconds": 900}
+    ]
+    await invoke(
+        "update_recipe",
+        slug="test-recipe",
+        instructions=[{"text": "Simmer the sauce longer.", "durationSeconds": 1200}],
+    )
+    steps = fetcher.last("PUT", "/api/recipes/")["json"]["recipeInstructions"]
+
+    assert len(steps) == 1
+    assert steps[0]["text"] == "Simmer the sauce longer."
+    assert steps[0]["durationSeconds"] == 1200
+
+
+async def test_update_recipe_keeps_step_durations_when_steps_untouched(
+    invoke, fetcher
+):
+    fetcher.recipe["recipeInstructions"] = [
+        {"text": "Simmer the sauce.", "durationSeconds": 900}
+    ]
+    await invoke("update_recipe", slug="test-recipe", ingredients=["2 onions"])
+    steps = fetcher.last("PUT", "/api/recipes/")["json"]["recipeInstructions"]
+
+    assert steps[0]["durationSeconds"] == 900
+
+
+@pytest.mark.parametrize("value", [0, -1, 2.5])
+async def test_update_recipe_rejects_invalid_step_duration(invoke, fetcher, value):
+    with pytest.raises(ToolError):
+        await invoke(
+            "update_recipe",
+            slug="test-recipe",
+            instructions=[{"text": "Simmer.", "durationSeconds": value}],
+        )
+    assert fetcher.requests == []
+
+
 async def test_create_recipe_sets_metadata_tags_tools_and_image(invoke, fetcher):
     await invoke(
         "create_recipe",
