@@ -88,10 +88,11 @@ class MealplanMixin:
         return self._handle_request("POST", "/api/households/mealplans", json=payload)
 
     def update_mealplan(
-        self, entry_id: str, entry_data: Dict[str, Any]
+        self, entry_id: int | str, entry_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Update an entry while preserving fields required by Mealie's PUT."""
-        if not entry_id or not entry_id.strip():
+        entry_id = "" if entry_id is None else str(entry_id).strip()
+        if not entry_id:
             raise ValueError("Mealplan entry ID cannot be empty")
         patch = MealPlanUpdate.model_validate(entry_data).model_dump(
             by_alias=True, exclude_unset=True
@@ -112,7 +113,7 @@ class MealplanMixin:
             "PUT", f"/api/households/mealplans/{entry_id}", json=merged_data
         )
 
-    def delete_mealplan(self, item_id: str) -> Dict[str, Any]:
+    def delete_mealplan(self, item_id: int | str) -> Dict[str, Any]:
         """Delete a specific mealplan entry.
 
         Args:
@@ -125,7 +126,8 @@ class MealplanMixin:
             ValueError: If item_id is empty
             MealieApiError: If the API request fails
         """
-        if not item_id or not item_id.strip():
+        item_id = "" if item_id is None else str(item_id).strip()
+        if not item_id:
             raise ValueError("Mealplan entry ID cannot be empty")
 
         logger.info({"message": "Deleting mealplan entry"})

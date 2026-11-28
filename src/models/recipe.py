@@ -9,6 +9,8 @@ class IngredientUnit(BaseModel):
     pluralName: Optional[str] = None
     description: str = ""
     extras: Optional[Dict[str, Any]] = None
+    standardQuantity: Optional[float] = None
+    standardUnit: Optional[str] = None
     fraction: bool = True
     abbreviation: str = ""
     pluralAbbreviation: Optional[str] = ""
@@ -27,21 +29,25 @@ class IngredientFood(BaseModel):
     labelId: Optional[str] = None
     label: Optional[Any] = None
     aliases: List[Any] = Field(default_factory=list)
+    substitutions: List[Dict[str, Any]] = Field(default_factory=list)
     householdsWithIngredientFood: List[str] = Field(default_factory=list)
     createdAt: Optional[str] = None
     updatedAt: Optional[str] = None
 
 
 class RecipeIngredient(BaseModel):
+    # Version-dependent ingredient flags: preserve when supplied, omit when absent.
+    isFood: Optional[bool] = None
+    disableAmount: Optional[bool] = None
     quantity: Optional[float] = Field(default=None, allow_inf_nan=False)
     unit: Optional[IngredientUnit] = None
     food: Optional[IngredientFood] = None
     note: Optional[str] = None
-    isFood: Optional[bool] = True
-    disableAmount: Optional[bool] = False
     display: Optional[str] = None
     title: Optional[str] = None
     originalText: Optional[str] = None
+    referencedRecipe: Optional[Dict[str, Any]] = None
+    substitutions: List[Dict[str, Any]] = Field(default_factory=list)
     referenceId: Optional[str] = None
 
 
@@ -55,6 +61,8 @@ class RecipeInstruction(BaseModel):
     summary: Optional[str] = None
     text: str
     ingredientReferences: List[IngredientReference] = Field(default_factory=list)
+    noteReferences: List[IngredientReference] = Field(default_factory=list)
+    durationSeconds: Optional[int] = None
 
 
 class RecipeNutrition(BaseModel):
@@ -199,6 +207,9 @@ class Recipe(BaseModel):
     prepTime: Optional[str] = None
     cookTime: Optional[str] = None
     performTime: Optional[str] = None
+    totalTimeSeconds: Optional[int] = None
+    prepTimeSeconds: Optional[int] = None
+    performTimeSeconds: Optional[int] = None
     description: Optional[str] = None
     recipeCategory: Optional[List[RecipeCategory]] = Field(default_factory=list)
     tags: Optional[List[RecipeTag]] = Field(default_factory=list)
@@ -223,9 +234,18 @@ class Recipe(BaseModel):
 class RecipeIngredientInput(BaseModel):
     """Structured ingredient accepted by the create/update recipe tools.
 
-    Pass a plain string instead of this object to let Mealie's
-    natural-language parser resolve the quantity, unit, and food.
+    A plain string is stored as a text note. Call parse_ingredients explicitly
+    and reuse its structured quantity/unit/food objects for scalable amounts.
+    Lists replace the whole collection: copy originalText, referencedRecipe and
+    substitutions from get_recipe unchanged; omitted fields are lost.
     """
+
+    originalText: Optional[str] = None
+    referencedRecipe: Optional[Dict[str, Any]] = None
+    substitutions: Optional[List[Dict[str, Any]]] = None
+    # Version-dependent ingredient flags: preserve when supplied, omit when absent.
+    isFood: Optional[bool] = None
+    disableAmount: Optional[bool] = None
 
     referenceId: Optional[str] = Field(
         default=None,
@@ -266,8 +286,12 @@ class RecipeInstructionInput(BaseModel):
     """Structured preparation step accepted by the create/update recipe tools.
 
     Pass a plain string instead of this object for a step that has no title
-    and no ingredient links.
+    and no ingredient links. Copy id and noteReferences from get_recipe to
+    preserve existing step and note links when replacing the collection.
     """
+
+    id: Optional[str] = None
+    noteReferences: Optional[List[IngredientReference]] = None
 
     text: str = Field(description="The instruction text for this step.")
     title: Optional[str] = Field(
@@ -292,6 +316,17 @@ class RecipeInstructionInput(BaseModel):
             "referenceId set on those ingredients (Mealie requires UUID v4 here; "
             "non-v4 values are converted to a stable UUID v4 server-side). "
             "Enables Mealie's cook-mode highlighting."
+        ),
+    )
+    durationSeconds: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=2147483647,
+        description=(
+            "Timer for this step in whole seconds, e.g. 900 for 15 minutes. "
+            "Requires Mealie 3.30 or later. Instruction lists replace the whole "
+            "collection, so copy durationSeconds from get_recipe to keep an "
+            "existing step timer."
         ),
     )
 

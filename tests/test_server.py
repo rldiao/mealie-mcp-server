@@ -25,6 +25,8 @@ def load_server(monkeypatch, request):
 
         def respond(api_request):
             requests.append(api_request)
+            if api_request.url.path == "/api/users/self":
+                return httpx.Response(200, json={"admin": False}, request=api_request)
             if api_request.url.path == "/api/app/about":
                 return httpx.Response(health_status, json={})
             assert api_request.url.path == "/api/recipes"

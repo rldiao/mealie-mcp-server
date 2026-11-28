@@ -37,6 +37,11 @@ class MealieClient:
         try:
             response = self._client.get("/api/app/about")
             response.raise_for_status()
+            identity = self._client.get("/api/users/self")
+            identity.raise_for_status()
+            user = identity.json()
+            if not isinstance(user, dict) or type(user.get("admin")) is not bool:
+                raise ValueError("Mealie returned an invalid user identity")
         except BaseException as error:
             self._client.close()
             self._log_failure("Checking Mealie health", error)

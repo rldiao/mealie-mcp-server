@@ -28,6 +28,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Instruction steps accept `durationSeconds`, Mealie's per-step timer (added in
+  Mealie 3.30). `create_recipe` and `update_recipe` forward it, and recipe reads
+  include it. Previously a step timer was dropped whenever `update_recipe`
+  replaced the instruction list; copy `durationSeconds` from `get_recipe` to keep
+  existing timers when rewriting steps. Values must be whole seconds of at least 1.
 - `create_recipe` and `update_recipe` accept a `notes` argument, a list of
   `{title, text}` recipe notes (`title` defaults to `""`, which Mealie accepts).
   `update_recipe` replaces the whole list when `notes` is supplied.
@@ -52,6 +57,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   object, so toggles left out keep their value.
 
 ### Fixed
+
+- Preserve Mealie 3.29 structured recipe durations in concise reads and clear
+  only the matching duration when changing its time text. Mealie 3.28 text
+  durations remain supported.
 
 - Recipes now expose `showAssets` and `showNutrition` through their settings.
   Previously, uploaded assets and nutrition could be stored but hidden in the
