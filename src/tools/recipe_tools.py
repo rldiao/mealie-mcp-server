@@ -137,6 +137,11 @@ def _recipe_changes(
     changes = {
         field_names[key]: value for key, value in fields.items() if value is not None
     }
+    # Mealie 3.29 displays structured duration and free text together. An explicit
+    # text replacement must clear only that duration; unrelated times stay intact.
+    for field in ("totalTime", "prepTime", "performTime"):
+        if field in changes:
+            changes[field + "Seconds"] = None
     if "name" in changes:
         _require_text(changes["name"], "Recipe name")
     if "recipeServings" in changes and not math.isfinite(changes["recipeServings"]):
@@ -291,6 +296,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                     "recipeYieldQuantity",
                     "recipeYield",
                     "totalTime",
+                    "totalTimeSeconds",
+                    "prepTimeSeconds",
+                    "performTimeSeconds",
                     "rating",
                     "orgURL",
                     "tags",
@@ -381,7 +389,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             name: The name of the new recipe.
             description: Recipe description.
             org_url: Source URL for the recipe (shown as a link in the Mealie UI).
-            total_time: Total time as free text, e.g. "35 min" or ISO-8601 "PT35M".
+            total_time: Total time as free text, e.g. "35 min".
             prep_time: Preparation time, same format as total_time.
             cook_time: Cooking time, same format as total_time.
             perform_time: Hands-on/active time, same format as total_time.
@@ -448,7 +456,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Omitted or null fields are unchanged. Provided ingredient/instruction
         lists replace those fields; empty lists clear them. Content changes use
         a read-merge-write to preserve other recipe fields; metadata-only changes
-        use PATCH.
+        use PATCH. Setting total_time, prep_time, or perform_time clears the
+        corresponding structured duration in Mealie 3.29 and later.
 
         Args:
             slug: The unique text identifier for the recipe to be updated.
@@ -456,7 +465,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             description: New description for the recipe.
             recipe_yield: Yield as free text, e.g. "4 Portionen".
             servings: Number of servings (numeric).
-            total_time: Total time as free text, e.g. "35 min" or ISO-8601 "PT35M".
+            total_time: Total time as free text, e.g. "35 min".
             prep_time: Preparation time, same format as total_time.
             cook_time: Cooking time, same format as total_time.
             perform_time: Hands-on/active time, same format as total_time.
