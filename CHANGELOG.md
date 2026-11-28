@@ -33,6 +33,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   include it. Previously a step timer was dropped whenever `update_recipe`
   replaced the instruction list; copy `durationSeconds` from `get_recipe` to keep
   existing timers when rewriting steps. Values must be whole seconds of at least 1.
+- `create_recipe` and `update_recipe` accept a `notes` argument, a list of
+  `{title, text}` recipe notes (`title` defaults to `""`, which Mealie accepts).
+  `update_recipe` replaces the whole list when `notes` is supplied.
+- `add_recipe_note` appends one note to a recipe without resending the others.
+  The MCP inventory grows from 61 to 62 tools.
 - `create_recipe` and `update_recipe` accept a `nutrition` argument covering
   Mealie's full key set (calories, macros, cholesterol, sodium, sugars, and the
   fat breakdown). Numbers are converted to the strings Mealie stores. Mealie

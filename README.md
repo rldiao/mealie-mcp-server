@@ -192,15 +192,16 @@ See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooti
 
 ## Available Tools
 
-### Recipe Tools (12 operations)
+### Recipe Tools (13 operations)
 
 - `get_recipes` - List/search recipes with advanced filtering
 - `get_recipe` - Get complete recipe details, or a summary with `concise=true`
 - `create_recipe` - Create a recipe; only the name is required, with optional
-  ingredients, instructions, metadata, nutrition, and display settings
+  ingredients, instructions, metadata, nutrition, display settings, and notes
 - `import_recipe_from_url` - Import a recipe from a web page
-- `update_recipe` - Update content or metadata, including nutrition and display
-  settings; omitted fields are preserved, and empty lists clear content
+- `update_recipe` - Update content or metadata, including nutrition, display
+  settings, and notes; omitted fields are preserved, and empty lists clear content
+- `add_recipe_note` - Append one note to a recipe, keeping its existing notes
 - `duplicate_recipe` - Clone a recipe
 - `mark_recipe_last_made` - Update last made timestamp
 - `set_recipe_image_from_url` - Set image from URL
@@ -282,10 +283,10 @@ See [Usage Examples](USAGE_EXAMPLES.md) for detailed workflows and troubleshooti
 - `delete_mealplan` - Delete an entry
 - `get_todays_mealplan` - Get today's meals
 
-**Total: 61 tools**
+**Total: 62 tools**
 
 With `MEALIE_ENABLE_AI_IMPORT=true`, `import_recipe_with_ai` adds one optional
-recipe operation: **62 total tools, including 13 recipe tools**. It is absent
+recipe operation: **63 total tools, including 14 recipe tools**. It is absent
 from discovery and cannot be called when disabled.
 
 ### Migrating consolidated tools (breaking change)
@@ -441,6 +442,19 @@ suit, so pass every value you want to keep:
 # Clears every nutrition value except fat.
 update_recipe(slug="...", nutrition={"fatContent": "12"})
 ```
+
+### Notes Are Replaced by `update_recipe`, Appended by `add_recipe_note`
+
+Recipe notes are a list of `{title, text}` entries. Like ingredients and
+instructions, `update_recipe(notes=[...])` replaces the whole list, so include
+the existing notes you want to keep. `add_recipe_note` reads the current notes
+and appends one:
+
+```python
+add_recipe_note(slug="...", title="Storage", text="Keeps 4 days refrigerated.")
+```
+
+Mealie requires a note title but accepts an empty one; `title` defaults to `""`.
 
 ### Parsing Ingredients in Bulk
 
