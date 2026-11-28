@@ -5,6 +5,7 @@ import json
 import logging
 import uuid
 from copy import deepcopy
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
@@ -73,13 +74,10 @@ async def test_create_recipe_accepts_flat_and_structured(invoke, fetcher):
     assert ings[1]["food"] == {
         "id": "f1",
         "name": "egg",
-        "description": "",
-        "aliases": [],
-        "householdsWithIngredientFood": [],
     }
     # already a valid UUID -> passes through unchanged
     assert ings[1]["referenceId"] == "a1000001-0000-4000-8000-000000000001"
-    assert steps[0]["ingredientReferences"] == []
+    assert steps[0].get("ingredientReferences", []) == []
     assert steps[1]["title"] == "Eggs"
     assert steps[1]["ingredientReferences"] == [
         {"referenceId": "a1000001-0000-4000-8000-000000000001"}
@@ -218,6 +216,9 @@ async def test_update_recipe_maps_all_fields(invoke, fetcher):
         "prepTime": "10 min",
         "cookTime": "25 min",
         "performTime": "20 min",
+        "totalTimeSeconds": None,
+        "prepTimeSeconds": None,
+        "performTimeSeconds": None,
         "orgURL": "https://example.com/r",
         "tags": [{"id": "t1", "name": "Quick", "slug": "quick"}],
         "tools": [{"id": "k1", "name": "Pfanne", "slug": "pfanne"}],
@@ -253,6 +254,18 @@ async def test_update_recipe_sets_nutrition(invoke, fetcher):
     )
     body = fetcher.last("PATCH", "/api/recipes/")["json"]
     assert body == {"nutrition": {"calories": "450", "fatContent": "12"}}
+
+
+async def test_get_recipe_concise_reads_household_last_made(invoke, fetcher):
+    # Mealie keeps lastMade per household, not on the recipe record.
+    fetcher.responses["GET", "/api/households/self/recipes/test-recipe"] = {
+        "recipeId": fetcher.recipe["id"],
+        "lastMade": "2026-10-18T10:00:00Z",
+    }
+    out = await invoke("get_recipe", slug="test-recipe", concise=True)
+    assert out["lastMade"] == "2026-10-18T10:00:00Z"
+    fetcher.responses["GET", "/api/households/self/recipes/test-recipe"] = {"lastMade": None}
+    assert "lastMade" not in await invoke("get_recipe", slug="test-recipe", concise=True)
 
 
 async def test_get_recipe_concise_includes_orgurl_tags_tools(invoke, fetcher):
@@ -853,3 +866,13 @@ def test_recipe_api_upload_logs_exclude_filenames_and_identifiers(fetcher, caplo
     fetcher.upload_recipe_asset("private-slug", b"private-content", "private-file.pdf")
     for private in ("private-slug", "private-content", "private-file"):
         assert private not in caplog.text
+
+
+def test_last_made_default_timestamp_is_utc_with_z_suffix(fetcher):
+    fetcher.responses["PATCH", "/api/recipes/test-recipe/last-made"] = {}
+    fetcher.update_recipe_last_made("test-recipe")
+    timestamp = fetcher.last("PATCH")["json"]["timestamp"]
+    assert timestamp.endswith("Z")
+    parsed = datetime.fromisoformat(timestamp)
+    assert parsed.utcoffset() == timedelta(0)
+    assert abs(datetime.now(UTC) - parsed) < timedelta(minutes=1)

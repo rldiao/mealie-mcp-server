@@ -28,8 +28,7 @@ def _build_ingredient(
 ) -> RecipeIngredient:
     """Coerce a flat string or structured ingredient into a RecipeIngredient.
 
-    A plain string becomes a note for Mealie's natural-language parser to
-    resolve; a structured object maps its fields straight onto the Mealie
+    A plain string is stored as a note without implicit parsing; a structured object maps its fields straight onto the Mealie
     RecipeIngredient model.
     """
     if isinstance(ingredient, str):
@@ -137,6 +136,11 @@ def _recipe_changes(
     changes = {
         field_names[key]: value for key, value in fields.items() if value is not None
     }
+    # Mealie 3.29 displays structured duration and free text together. An explicit
+    # text replacement must clear only that duration; unrelated times stay intact.
+    for field in ("totalTime", "prepTime", "performTime"):
+        if field in changes:
+            changes[field + "Seconds"] = None
     if "name" in changes:
         _require_text(changes["name"], "Recipe name")
     if "recipeServings" in changes and not math.isfinite(changes["recipeServings"]):
@@ -146,11 +150,12 @@ def _recipe_changes(
     _normalize_references(built_ingredients, built_instructions)
     if ingredients is not None:
         changes["recipeIngredient"] = [
-            i.model_dump(exclude_none=True) for i in built_ingredients
+            i.model_dump(exclude_none=True, exclude_unset=True, exclude={"display"})
+            for i in built_ingredients
         ]
     if instructions is not None:
         changes["recipeInstructions"] = [
-            i.model_dump(exclude_none=True) for i in built_instructions
+            i.model_dump(exclude_none=True, exclude_unset=True) for i in built_instructions
         ]
     if tags is not None:
         changes["tags"] = [_organizer_payload(t) for t in tags]
@@ -282,7 +287,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             recipe_json = mealie.get_recipe(slug)
             if not concise:
                 return recipe_json
-            recipe = Recipe.model_validate(recipe_json)
+            recipe = Recipe.model_validate(
+                {**recipe_json, "lastMade": mealie.get_recipe_last_made(slug)}
+            )
             return recipe.model_dump(
                 include={
                     "name",
@@ -291,6 +298,9 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
                     "recipeYieldQuantity",
                     "recipeYield",
                     "totalTime",
+                    "totalTimeSeconds",
+                    "prepTimeSeconds",
+                    "performTimeSeconds",
                     "rating",
                     "orgURL",
                     "tags",
@@ -368,8 +378,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Ingredients and instructions each accept either a plain string or a
         structured object:
 
-        - An ingredient string (e.g. "200 g basmati rice") is resolved by
-          Mealie's natural-language parser into quantity/unit/food.
+        - An ingredient string (e.g. "200 g basmati rice") is stored as a text
+          note. Use parse_ingredients explicitly for quantity/unit/food.
         - An ingredient object can set quantity, note, title, an existing
           Mealie unit/food (by id and name), and a referenceId for step links.
         - An instruction string is the step text; an instruction object can
@@ -382,7 +392,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             name: The name of the new recipe.
             description: Recipe description.
             org_url: Source URL for the recipe (shown as a link in the Mealie UI).
-            total_time: Total time as free text, e.g. "35 min" or ISO-8601 "PT35M".
+            total_time: Total time as free text, e.g. "35 min".
             prep_time: Preparation time, same format as total_time.
             cook_time: Cooking time, same format as total_time.
             perform_time: Hands-on/active time, same format as total_time.
@@ -449,7 +459,8 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
         Omitted or null fields are unchanged. Provided ingredient/instruction
         lists replace those fields; empty lists clear them. Content changes use
         a read-merge-write to preserve other recipe fields; metadata-only changes
-        use PATCH.
+        use PATCH. Setting total_time, prep_time, or perform_time clears the
+        corresponding structured duration in Mealie 3.29 and later.
 
         Args:
             slug: The unique text identifier for the recipe to be updated.
@@ -457,7 +468,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             description: New description for the recipe.
             recipe_yield: Yield as free text, e.g. "4 Portionen".
             servings: Number of servings (numeric).
-            total_time: Total time as free text, e.g. "35 min" or ISO-8601 "PT35M".
+            total_time: Total time as free text, e.g. "35 min".
             prep_time: Preparation time, same format as total_time.
             cook_time: Cooking time, same format as total_time.
             perform_time: Hands-on/active time, same format as total_time.
