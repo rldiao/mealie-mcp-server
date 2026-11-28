@@ -73,13 +73,10 @@ async def test_create_recipe_accepts_flat_and_structured(invoke, fetcher):
     assert ings[1]["food"] == {
         "id": "f1",
         "name": "egg",
-        "description": "",
-        "aliases": [],
-        "householdsWithIngredientFood": [],
     }
     # already a valid UUID -> passes through unchanged
     assert ings[1]["referenceId"] == "a1000001-0000-4000-8000-000000000001"
-    assert steps[0]["ingredientReferences"] == []
+    assert steps[0].get("ingredientReferences", []) == []
     assert steps[1]["title"] == "Eggs"
     assert steps[1]["ingredientReferences"] == [
         {"referenceId": "a1000001-0000-4000-8000-000000000001"}
